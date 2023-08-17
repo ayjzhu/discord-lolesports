@@ -5,6 +5,7 @@ import utils.lolesports as lolesports
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 import pytz
+from reactionmenu import ViewMenu, ViewButton
 
 class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
@@ -44,15 +45,17 @@ class Query(commands.Cog):
         data = lolesports.get_schedule(keyword)
         # create dataframe
         df = pd.DataFrame(data['data']['schedule']['events'])
-        unstarted_df = df[df['state'] == 'unstarted'].reset_index(drop=True)
-        embed = discord.Embed(title=f"Schedule for \"{keyword.name}\":", 
-                        description = f"Upcoming matches for the {unstarted_df['league'].iloc[0]['name']}",
-                        color = discord.Color.teal(),
-                        # set the timestamp to the current time in PST time
-                        timestamp = datetime.now(timezone(timedelta(hours=-7))))
-        embed.set_footer(text="Time shown in {}".format(self.TIMEZONE))
-
-        for index, row in unstarted_df.iterrows():
+        # unstarted_df = df[df['state'] == 'unstarted'].reset_index(drop=True)
+        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed)
+        for index, row in df.iterrows():
+            # create new embed if the current embed is filled
+            embed = discord.Embed(title=f"Schedule for \"{keyword.name}\":", 
+                description = f"Upcoming matches for the {df['league'].iloc[0]['name']}",
+                color = discord.Color.teal(),
+                # set the timestamp to the current time in PST time
+                timestamp = datetime.now(timezone(timedelta(hours=-7))))
+            embed.set_footer(text="Time shown in {}".format(self.TIMEZONE))   
+        
             teams = [(team['name'], team['code']) for team in row['match']['teams']]
             teams_str = ' vs '.join([f'{name}({code})' for name, code in teams])
             embed.add_field(name='Teams', value=teams_str, inline=False)
@@ -63,12 +66,24 @@ class Query(commands.Cog):
             embed.add_field(name='League', value=row['league']['name'], inline=True)
             embed.add_field(name='Stage', value=row['blockName'], inline=True)
             # add a strategy field with the format of bestOf 5
-            embed.add_field(name='format', value=f"{row['match']['strategy']['type']} {row['match']['strategy']['count']}", inline=True)
-            
+            embed.add_field(name='Format', value=f"{row['match']['strategy']['type']} {row['match']['strategy']['count']}", inline=True)
             # only add this field if its not the last row
-            # if index != len(unstarted_df) - 1:
-            #     embed.add_field(name="\uFEFF", value="Next up", inline=False)
-        await interaction.response.send_message(content='Upcoming games', embed=embed)
+            if index != len(df) - 1:
+                embed.add_field(name="\uFEFF", value="Next up", inline=False)
+
+            # add the embed to the menu for every 4 rows or there are less than 4 rows in the dataframe
+            # if len(unstarted_df) < 5 or (index % 4 == 0 and index != 0):
+            menu.add_page(embed)
+            
+        menu.add_button(ViewButton.go_to_first_page())
+        menu.add_button(ViewButton(style=discord.ButtonStyle.green, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE))
+        menu.add_button(ViewButton(style=discord.ButtonStyle.primary, label='Next', custom_id=ViewButton.ID_NEXT_PAGE))
+        menu.add_button(ViewButton.go_to_last_page())
+        menu.add_button(ViewButton.end_session())
+        # await interaction.response.send_message(content='Upcoming games')
+        await menu.start()
+
+    
     
 async def setup(client: commands.Bot) -> None:
     await client.add_cog(Query(client))
