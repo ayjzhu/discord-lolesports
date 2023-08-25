@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import utils.lolesports as lolesports
+import utils.lolesports as lol
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 import pytz
@@ -11,6 +11,7 @@ class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
         self.client = client
         self.TIMEZONE = 'US/Pacific'
+        self.lolesports = lol.LolEsports(region=lol.Region.LCS)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -27,7 +28,7 @@ class Query(commands.Cog):
 
     @app_commands.command(name='live', description='Get the live events')
     async def live(self, interaction: discord.Interaction):
-        result = lolesports.get_live()
+        result = self.lolesports.get_live()
         await interaction.response.send_message(result)
     
     @app_commands.command(name='schedule', description='Get the schedule of upcoming events')
@@ -36,13 +37,13 @@ class Query(commands.Cog):
         print(region)
         # validate region
         try:
-            keyword = lolesports.Region[region.upper()]
+            keyword = lol.Region[region.upper()]
         except KeyError as e:
             print(f'**`ERROR:`** {type(e).__name__} - {e}')
             await interaction.response.send_message(f'Invalid region: {region}')
             return
 
-        data = lolesports.get_schedule(keyword)
+        data = self.lolesports.get_schedule(keyword)
         # create dataframe
         df = pd.DataFrame(data['data']['schedule']['events'])
         # unstarted_df = df[df['state'] == 'unstarted'].reset_index(drop=True)
@@ -82,7 +83,6 @@ class Query(commands.Cog):
         menu.add_button(ViewButton.end_session())
         # await interaction.response.send_message(content='Upcoming games')
         await menu.start()
-
     
     
 async def setup(client: commands.Bot) -> None:
