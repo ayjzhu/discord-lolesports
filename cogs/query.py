@@ -83,7 +83,45 @@ class Query(commands.Cog):
         menu.add_button(ViewButton.end_session())
         # await interaction.response.send_message(content='Upcoming games')
         await menu.start()
-    
+
+    # using slash commands create the leagues command
+    @app_commands.command(name='leagues', description='Display all the esports pro leagues and regions')
+    async def leagues(self, interaction: discord.Interaction,):
+        # icon url constants
+        LOL_ESPORTS_ICON = r"https://am-a.akamaihd.net/image?resize=140:&f=http%3A%2F%2Fstatic.lolesports.com%2Fteams%2F1681281407829_LOLESPORTSICON.png"
+        RIOT_ICON = 'https://static.developer.riotgames.com/img/logo.png'
+        leagues = self.lolesports.get_leagues(is_sorted=True)
+        if leagues is None:
+            await interaction.response.send_message('Something went wrong.')
+            return
+        # create dataframe
+        df = pd.DataFrame(leagues)
+        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed)
+
+        # loop through the dataframe create embed and add to menu
+        for index, row in df.iterrows():
+            embed = discord.Embed(title=f"{row['name']}",
+                                # description=f"Pro league #{index+1}",
+                                color=discord.Color.blurple(),
+                                url=f"https://lolesports.com/schedule?leagues={row['slug']}")
+            embed.set_author(name="LoL Esports League", 
+                            icon_url= LOL_ESPORTS_ICON)
+                            # url="https://lolesports.com")                                
+            embed.add_field(name='Region', value=row['region'].title(), inline=False)
+            embed.add_field(name='Schedules', value=f"[Click here](https://lolesports.com/schedule?leagues={row['slug']})", inline=True)
+            embed.add_field(name='ID', value=row['id'], inline=True)
+            embed.set_image(url=row['image'])
+            embed.set_footer(text="Powered by Riot Games", icon_url=RIOT_ICON)
+            # add the embed to the menu
+            menu.add_page(embed)
+        # add buttons to the menu
+        menu.add_button(ViewButton.go_to_first_page())
+        menu.add_button(ViewButton(style=discord.ButtonStyle.green, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE))
+        menu.add_button(ViewButton(style=discord.ButtonStyle.primary, label='Next', custom_id=ViewButton.ID_NEXT_PAGE))
+        menu.add_button(ViewButton.go_to_last_page())
+        menu.add_button(ViewButton(style=discord.ButtonStyle.danger, label='close', custom_id=ViewButton.ID_END_SESSION))
+        await menu.start()
+
     
 async def setup(client: commands.Bot) -> None:
     await client.add_cog(Query(client))
