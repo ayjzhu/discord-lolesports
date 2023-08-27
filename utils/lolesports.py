@@ -27,7 +27,7 @@ class LolEsports:
             "x-api-key": self.x_api_key
         }
 
-    def get_live(self):
+    def get_live(self) -> str:
         '''Get the live events
 
         Returns
@@ -64,7 +64,7 @@ class LolEsports:
         return result
 
     # make the region parameter optional
-    def get_schedule(self,  region: Region = None):
+    def get_schedule(self,  region: Region = None) -> dict:
         '''Get the schedule of upcoming events
 
         Parameters
@@ -91,7 +91,7 @@ class LolEsports:
         return response.json()
 
     # create a get esports league function
-    def get_leagues(self, is_sorted: bool = False):
+    def get_leagues(self, is_sorted: bool = False) -> list: 
         """Get all the esports leagues
 
         Parameters
@@ -101,7 +101,7 @@ class LolEsports:
 
         Returns
         -------
-        league: `list`
+        leagues: `list`
             A list of esports leagues
         ---
         """
@@ -112,19 +112,79 @@ class LolEsports:
         response = requests.get(url, params=payload, headers=self.headers)
         print(response)
         try:
-            leagues = response.json()['data']['leagues'] 
+            leagues = response.json()['data']['leagues'] # raw leagues data
             df = pd.DataFrame(leagues)
             if is_sorted:
-                df = df.sort_values(by=['priority']).reset_index(drop=True)
-                leagues = df.to_dict(orient='records')
+                sorted_df = df.sort_values(by=['priority']).reset_index(drop=True)
+
+                # further sort the leagues to bring the 2 semi major leagues to the top
+                insert_index = len(df.loc[df['priority'] < 202])    # insert below the 4 major leagues
+                # Find the index of the row with "VCS" in the name column
+                vcs_index = sorted_df[sorted_df['name'] == 'VCS'].index[0]
+                # Extract the row with "VCS" and "PCS" (the row below it)
+                rows_to_move = sorted_df.loc[vcs_index:vcs_index+1]
+                # Delete the rows from their original positions
+                sorted_df = sorted_df.drop(rows_to_move.index)
+                # Insert the rows at index 4
+                sorted_df = pd.concat([sorted_df.iloc[:insert_index], rows_to_move, sorted_df.iloc[insert_index:]], ignore_index=True)
+                # convert the dataframe to a list of dictionaries 
+                leagues = sorted_df.to_dict(orient='records')
         except Exception as e:
             print(f'**`ERROR:`** {type(e).__name__} - {e}')
             return None
         else:
             return leagues
+    
+    # create a helper function to process the league data and get the sub leagues
+    def get_sub_leagues(self, leagues: list) -> tuple:
+        """ A helper to process the leagues data and sort them into various sub leagues
+
+        Parameters
+        ----------
+        leagues: `list`
+            A list of esports leagues
+
+        Returns
+        -------
+        sub_leagues: `tuple`
+            A tuple of sub leagues`list` in the following order: major_leagues, popular_leagues, main_leagues
+        ---
+        """
+        leagues = self.get_leagues(is_sorted=True)
+        leagues_df = pd.DataFrame(leagues)
+        if leagues is None:
+            return None
+        try:
+            # Find the index of the row with "VCS" in the name column
+            vcs_index = leagues_df[leagues_df['name'] == 'VCS'].index[0]
+            # Extract the row with "VCS" and "PCS" (the row below it)
+            semi_leagues = leagues_df.loc[vcs_index:vcs_index+1]
+            # 9 minor_leagues & international: TCL, CBLOL, LLA, LCO, LJL, LCL, WORLDS, MSI, ALL_STAR_EVENT
+            minor_leagues = leagues_df.loc[(leagues_df['priority'] < 1000) & (leagues_df['priority'] > 201)]
+
+            # processed leagues data
+            # 4 major leagues: LCS, LEC, LCK, LPL
+            major_leagues = leagues_df.loc[leagues_df['priority'] < 202]
+            # 6 popular leagues: LCS, LEC, LCK, LPL, PCS, VCS
+            popular_leagues = pd.concat([major_leagues, semi_leagues], ignore_index=True)
+            # 15 main leagues: LCS, LEC, LCK, LPL, PCS, VCS, TCL, CBLOL, LLA, LCO, LJL, LCL, WORLDS, MSI, ALL_STAR_EVENT
+            main_leagues = pd.concat([major_leagues, semi_leagues, minor_leagues], ignore_index=True)
+        except Exception as e:
+            print(f'**`ERROR:`** {type(e).__name__} - {e}')
+            return None
+        else:
+            return major_leagues.to_dict(orient='records'), popular_leagues.to_dict(orient='records'), main_leagues.to_dict(orient='records')
 
 if __name__ == "__main__":
     lolesports = LolEsports(region=Region.LCS)
     # print(lolesports.get_live())
     # print(lolesports.get_schedule(Region.LCK)['data']['schedule']['events'][-1])
-    print(lolesports.get_leagues(is_sorted=True)[1:5])
+    ## print the first 16 leagues by name
+    # leagues = lolesports.get_leagues(is_sorted=True)
+    # for league in leagues[:16]:
+    #     print(league['name'])
+    sub_leagues = lolesports.get_sub_leagues(lolesports.get_leagues(is_sorted=True))
+    # print the major, popular and main leagues by name
+    for league in sub_leagues[2]:
+        print(league['name'])
+    
