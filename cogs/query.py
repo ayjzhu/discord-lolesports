@@ -84,42 +84,123 @@ class Query(commands.Cog):
         # await interaction.response.send_message(content='Upcoming games')
         await menu.start()
 
+    # helper function to create embeds for the leagues
+    def _create_league_embeds(self, leagues: list) -> list:
+        '''Create embeds for the leagues'''
+        # icon url constants
+        LOL_ESPORTS_ICON = r"https://am-a.akamaihd.net/image?resize=140:&f=http%3A%2F%2Fstatic.lolesports.com%2Fteams%2F1681281407829_LOLESPORTSICON.png"
+        RIOT_ICON = 'https://static.developer.riotgames.com/img/logo.png'        
+        # create an embed list to store all the embeds
+        embeds = []
+        for league in leagues:
+            embed = discord.Embed(title=f"{league['name']}",
+                                color=discord.Color.blurple(),
+                                url=f"https://lolesports.com/schedule?leagues={league['slug']}")
+            embed.set_author(name="LoL Esports League", 
+                            icon_url= LOL_ESPORTS_ICON)
+            embed.add_field(name='Region', value=league['region'].title(), inline=False)
+            embed.add_field(name='Schedules', value=f"[Click here](https://lolesports.com/schedule?leagues={league['slug']})", inline=True)
+            embed.add_field(name='ID', value=league['id'], inline=True)
+            embed.set_image(url=league['image'])
+            embed.set_footer(text="Powered by Riot Games", icon_url=RIOT_ICON)
+            embeds.append(embed)
+
+        return embeds
+
     # using slash commands create the leagues command
     @app_commands.command(name='leagues', description='Display all the esports pro leagues and regions')
     async def leagues(self, interaction: discord.Interaction,):
-        # icon url constants
-        LOL_ESPORTS_ICON = r"https://am-a.akamaihd.net/image?resize=140:&f=http%3A%2F%2Fstatic.lolesports.com%2Fteams%2F1681281407829_LOLESPORTSICON.png"
-        RIOT_ICON = 'https://static.developer.riotgames.com/img/logo.png'
-        leagues = self.lolesports.get_leagues(is_sorted=True)
+        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed, name='leagues-menu')
+        leagues = self.lolesports.get_leagues(is_sorted=True)       
         if leagues is None:
             await interaction.response.send_message('Something went wrong.')
             return
-        # create dataframe
-        df = pd.DataFrame(leagues)
-        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed)
+        major_leagues, popular_leagues, primary_leagues = self.lolesports.get_sub_leagues(leagues)
+        leagues_embeds = self._create_league_embeds(leagues)
+        major_leagues_embeds = self._create_league_embeds(major_leagues)
+        primary_leagues_embeds = self._create_league_embeds(primary_leagues)
 
-        # loop through the dataframe create embed and add to menu
-        for index, row in df.iterrows():
-            embed = discord.Embed(title=f"{row['name']}",
-                                # description=f"Pro league #{index+1}",
-                                color=discord.Color.blurple(),
-                                url=f"https://lolesports.com/schedule?leagues={row['slug']}")
-            embed.set_author(name="LoL Esports League", 
-                            icon_url= LOL_ESPORTS_ICON)
-                            # url="https://lolesports.com")                                
-            embed.add_field(name='Region', value=row['region'].title(), inline=False)
-            embed.add_field(name='Schedules', value=f"[Click here](https://lolesports.com/schedule?leagues={row['slug']})", inline=True)
-            embed.add_field(name='ID', value=row['id'], inline=True)
-            embed.set_image(url=row['image'])
-            embed.set_footer(text="Powered by Riot Games", icon_url=RIOT_ICON)
-            # add the embed to the menu
-            menu.add_page(embed)
-        # add buttons to the menu
-        menu.add_button(ViewButton.go_to_first_page())
-        menu.add_button(ViewButton(style=discord.ButtonStyle.green, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE))
-        menu.add_button(ViewButton(style=discord.ButtonStyle.primary, label='Next', custom_id=ViewButton.ID_NEXT_PAGE))
-        menu.add_button(ViewButton.go_to_last_page())
-        menu.add_button(ViewButton(style=discord.ButtonStyle.danger, label='close', custom_id=ViewButton.ID_END_SESSION))
+        # # approach #2 to create a task and pass it to the followup
+        # async def task():
+        #     await menu.stop(delete_menu_message=True)
+        #     # await interaction.response.edit_message(content='Deleted menu', ephemeral=True)
+        #     await interaction.followup.send('Deleted menu', ephemeral=True)
+        # def taskWrapper():
+        #     self.client.loop.create_task(task())
+        #     print("excuted task")
+        
+        # major_league: have all the basic navigation buttons, can navigate to the primary leagues, and all leagues
+        async def major_leagues_followup():
+            # await menu.stop(delete_menu_message=True)
+            # add the nav buttons and the primary leagues button, all leagues button
+            buttons = [*nav_buttons, primary_leagues_button, all_leagues_button]
+            await menu.update(new_pages=major_leagues_embeds, new_buttons=buttons)
+            
+            # await major_leagues_menu.start()
+        
+        # all leagues: have all the basic navigation buttons, can navigate to the primary leagues, and major leagues
+        async def all_leagues_followup():
+            buttons = [*nav_buttons, primary_leagues_button, major_leagues_button]
+            await menu.update(new_pages=leagues_embeds, new_buttons=buttons)
+        
+        # primary leagues: have all the basic navigation buttons, can navigate to the all leagues, and major leagues
+        async def primary_leagues_followup():
+            buttons = [*nav_buttons, major_leagues_button, all_leagues_button]
+            await menu.update(new_pages=primary_leagues_embeds, new_buttons=buttons)
+
+    
+        # # ID caller for delete follow up to remove viewmenu asynchrounously
+        async def delete_menu():
+            await menu.stop(delete_menu_message=True)
+            await interaction.followup.send('Deleted menu', ephemeral=True)
+
+        delete_menu_followup = ViewButton.Followup(details=ViewButton.Followup.set_caller_details(delete_menu))
+        # major leagues button
+        delete_menu_button = ViewButton(
+            style=discord.ButtonStyle.red,
+            name='delete-button',
+            label='Delete',
+            custom_id=ViewButton.ID_CALLER,
+            followup=delete_menu_followup,
+            row=2
+        )
+        all_leagues_button = ViewButton(
+            name='all-leagues-button', 
+            style=discord.ButtonStyle.blurple, 
+            label='All Regions', 
+            custom_id=ViewButton.ID_CALLER,
+            followup=ViewButton.Followup(details=ViewButton.Followup.set_caller_details(all_leagues_followup)),
+            row=1
+        )
+
+        major_leagues_button = ViewButton(
+            name='major-leagues-button', 
+            style=discord.ButtonStyle.blurple, 
+            label='Major Regions', 
+            custom_id=ViewButton.ID_CALLER,
+            followup=ViewButton.Followup(details=ViewButton.Followup.set_caller_details(major_leagues_followup)),
+            row=1
+        )
+        primary_leagues_button = ViewButton(
+            name='primary-leagues-button', 
+            style=discord.ButtonStyle.blurple, 
+            label='Primary Regions', 
+            custom_id=ViewButton.ID_CALLER,
+            followup=ViewButton.Followup(details=ViewButton.Followup.set_caller_details(primary_leagues_followup)),
+            row=1
+        )
+        # add navigation buttons
+        nav_buttons = [
+            ViewButton(style=discord.ButtonStyle.gray, label='First Page', custom_id=ViewButton.ID_GO_TO_FIRST_PAGE),
+            ViewButton(style=discord.ButtonStyle.primary, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE),
+            ViewButton(style=discord.ButtonStyle.success, label='Next', custom_id=ViewButton.ID_NEXT_PAGE),
+            ViewButton(style=discord.ButtonStyle.secondary, label='Last Page', custom_id=ViewButton.ID_GO_TO_LAST_PAGE)
+        ]
+        menu.add_buttons(nav_buttons)
+        menu.add_button(delete_menu_button)
+        menu.add_button(primary_leagues_button)
+        menu.add_button(major_leagues_button)
+        menu.add_pages(leagues_embeds)
         await menu.start()
 
     

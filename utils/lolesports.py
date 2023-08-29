@@ -147,10 +147,10 @@ class LolEsports:
         Returns
         -------
         sub_leagues: `tuple`
-            A tuple of sub leagues`list` in the following order: major_leagues, popular_leagues, main_leagues
+            A tuple of sub leagues :attr:`list` in the following order: major_leagues, popular_leagues, primary_leagues
         ---
         """
-        leagues = self.get_leagues(is_sorted=True)
+        # leagues = self.get_leagues(is_sorted=True)
         leagues_df = pd.DataFrame(leagues)
         if leagues is None:
             return None
@@ -167,13 +167,13 @@ class LolEsports:
             major_leagues = leagues_df.loc[leagues_df['priority'] < 202]
             # 6 popular leagues: LCS, LEC, LCK, LPL, PCS, VCS
             popular_leagues = pd.concat([major_leagues, semi_leagues], ignore_index=True)
-            # 15 main leagues: LCS, LEC, LCK, LPL, PCS, VCS, TCL, CBLOL, LLA, LCO, LJL, LCL, WORLDS, MSI, ALL_STAR_EVENT
-            main_leagues = pd.concat([major_leagues, semi_leagues, minor_leagues], ignore_index=True)
+            # 15 primary leagues: LCS, LEC, LCK, LPL, PCS, VCS, TCL, CBLOL, LLA, LCO, LJL, LCL, WORLDS, MSI, ALL_STAR_EVENT
+            primary_leagues = pd.concat([major_leagues, semi_leagues, minor_leagues], ignore_index=True)
         except Exception as e:
             print(f'**`ERROR:`** {type(e).__name__} - {e}')
             return None
         else:
-            return major_leagues.to_dict(orient='records'), popular_leagues.to_dict(orient='records'), main_leagues.to_dict(orient='records')
+            return major_leagues.to_dict(orient='records'), popular_leagues.to_dict(orient='records'), primary_leagues.to_dict(orient='records')
 
 if __name__ == "__main__":
     lolesports = LolEsports(region=Region.LCS)
@@ -183,8 +183,8 @@ if __name__ == "__main__":
     # leagues = lolesports.get_leagues(is_sorted=True)
     # for league in leagues[:16]:
     #     print(league['name'])
-    sub_leagues = lolesports.get_sub_leagues(lolesports.get_leagues(is_sorted=True))
-    # print the major, popular and main leagues by name
-    for league in sub_leagues[2]:
+    sub_leagues = lolesports.get_sub_leagues(lolesports.get_leagues(is_sorted=True))[0]
+    # print the major, popular and pirmary leagues by name
+    for league in sub_leagues:
         print(league['name'])
     
