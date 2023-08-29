@@ -175,6 +175,8 @@ class LolEsports:
         else:
             return major_leagues.to_dict(orient='records'), popular_leagues.to_dict(orient='records'), primary_leagues.to_dict(orient='records')
 
+    
+
 if __name__ == "__main__":
     lolesports = LolEsports(region=Region.LCS)
     # print(lolesports.get_live())
