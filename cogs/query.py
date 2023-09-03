@@ -42,8 +42,8 @@ class Query(commands.Cog):
             print(f'**`ERROR:`** {type(e).__name__} - {e}')
             await interaction.response.send_message(f'Invalid region: {region}')
             return
-
         data = self.lolesports.get_schedule(keyword)
+        await interaction.response.defer(thinking=True)
         # create dataframe
         df = pd.DataFrame(data['data']['schedule']['events'])
         # unstarted_df = df[df['state'] == 'unstarted'].reset_index(drop=True)
@@ -85,7 +85,7 @@ class Query(commands.Cog):
         await menu.start()
 
     # helper function to create embeds for the leagues
-    def _create_league_embeds(self, leagues: list) -> list:
+    def _create_league_embeds(self, leagues: list, color: discord.Color) -> list:
         '''Create embeds for the leagues'''
         # icon url constants
         LOL_ESPORTS_ICON = r"https://am-a.akamaihd.net/image?resize=140:&f=http%3A%2F%2Fstatic.lolesports.com%2Fteams%2F1681281407829_LOLESPORTSICON.png"
@@ -94,8 +94,9 @@ class Query(commands.Cog):
         embeds = []
         for league in leagues:
             embed = discord.Embed(title=f"{league['name']}",
-                                color=discord.Color.blurple(),
-                                url=f"https://lolesports.com/schedule?leagues={league['slug']}")
+                color=color,
+                url=f"https://lolesports.com/schedule?leagues={league['slug']}"
+            )
             embed.set_author(name="LoL Esports League", 
                             icon_url= LOL_ESPORTS_ICON)
             embed.add_field(name='Region', value=league['region'].title(), inline=False)
@@ -110,15 +111,14 @@ class Query(commands.Cog):
     # using slash commands create the leagues command
     @app_commands.command(name='leagues', description='Display all the esports pro leagues and regions')
     async def leagues(self, interaction: discord.Interaction,):
-        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed, name='leagues-menu')
         leagues = self.lolesports.get_leagues(is_sorted=True)       
         if leagues is None:
             await interaction.response.send_message('Something went wrong.')
             return
-        major_leagues, popular_leagues, primary_leagues = self.lolesports.get_sub_leagues(leagues)
-        leagues_embeds = self._create_league_embeds(leagues)
-        major_leagues_embeds = self._create_league_embeds(major_leagues)
-        primary_leagues_embeds = self._create_league_embeds(primary_leagues)
+        major_leagues, popular_leagues, primary_leagues = self.lolesports._get_sub_leagues(leagues)
+        leagues_embeds = self._create_league_embeds(leagues, discord.Color.blurple())
+        major_leagues_embeds = self._create_league_embeds(major_leagues, discord.Color.blurple())
+        primary_leagues_embeds = self._create_league_embeds(primary_leagues, discord.Color.green())
 
         # # approach #2 to create a task and pass it to the followup
         # async def task():
@@ -132,20 +132,21 @@ class Query(commands.Cog):
         # major_league: have all the basic navigation buttons, can navigate to the primary leagues, and all leagues
         async def major_leagues_followup():
             # await menu.stop(delete_menu_message=True)
-            # add the nav buttons and the primary leagues button, all leagues button
-            buttons = [*nav_buttons, primary_leagues_button, all_leagues_button]
+            # reset all the buttons
+            menu.enable_all_buttons()
+            major_leagues_button.disabled = True
             await menu.update(new_pages=major_leagues_embeds, new_buttons=buttons)
-            
-            # await major_leagues_menu.start()
         
         # all leagues: have all the basic navigation buttons, can navigate to the primary leagues, and major leagues
         async def all_leagues_followup():
-            buttons = [*nav_buttons, primary_leagues_button, major_leagues_button]
+            menu.enable_all_buttons()
+            all_leagues_button.disabled = True
             await menu.update(new_pages=leagues_embeds, new_buttons=buttons)
         
-        # primary leagues: have all the basic navigation buttons, can navigate to the all leagues, and major leagues
+        # primary leagues(landing): have all the basic navigation buttons, can navigate to the all leagues, and major leagues
         async def primary_leagues_followup():
-            buttons = [*nav_buttons, major_leagues_button, all_leagues_button]
+            menu.enable_all_buttons()
+            primary_leagues_button.disabled = True
             await menu.update(new_pages=primary_leagues_embeds, new_buttons=buttons)
 
     
@@ -167,42 +168,51 @@ class Query(commands.Cog):
         all_leagues_button = ViewButton(
             name='all-leagues-button', 
             style=discord.ButtonStyle.blurple, 
-            label='All Regions', 
+            label='All Leagues', 
             custom_id=ViewButton.ID_CALLER,
             followup=ViewButton.Followup(details=ViewButton.Followup.set_caller_details(all_leagues_followup)),
             row=1
         )
-
         major_leagues_button = ViewButton(
             name='major-leagues-button', 
             style=discord.ButtonStyle.blurple, 
-            label='Major Regions', 
+            label='Major Leagues', 
             custom_id=ViewButton.ID_CALLER,
             followup=ViewButton.Followup(details=ViewButton.Followup.set_caller_details(major_leagues_followup)),
             row=1
         )
         primary_leagues_button = ViewButton(
             name='primary-leagues-button', 
-            style=discord.ButtonStyle.blurple, 
-            label='Primary Regions', 
+            style=discord.ButtonStyle.green, 
+            label='Primary Leagues', 
             custom_id=ViewButton.ID_CALLER,
             followup=ViewButton.Followup(details=ViewButton.Followup.set_caller_details(primary_leagues_followup)),
-            row=1
+            row=1,
+            disabled=True   # disable the button by default since the menu starts with the primary leagues
         )
-        # add navigation buttons
+        # intialize the basic layout for the starting menu: major leagues
+        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed, name='leagues-menu')
+        # navigation buttons
         nav_buttons = [
             ViewButton(style=discord.ButtonStyle.gray, label='First Page', custom_id=ViewButton.ID_GO_TO_FIRST_PAGE),
-            ViewButton(style=discord.ButtonStyle.primary, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE),
-            ViewButton(style=discord.ButtonStyle.success, label='Next', custom_id=ViewButton.ID_NEXT_PAGE),
-            ViewButton(style=discord.ButtonStyle.secondary, label='Last Page', custom_id=ViewButton.ID_GO_TO_LAST_PAGE)
+            ViewButton(style=discord.ButtonStyle.secondary, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE),
+            ViewButton(style=discord.ButtonStyle.secondary, label='Next', custom_id=ViewButton.ID_NEXT_PAGE),
+            ViewButton(style=discord.ButtonStyle.secondary, label='Last Page', custom_id=ViewButton.ID_GO_TO_LAST_PAGE),
+            # delete_menu_button
         ]
-        menu.add_buttons(nav_buttons)
-        menu.add_button(delete_menu_button)
-        menu.add_button(primary_leagues_button)
-        menu.add_button(major_leagues_button)
-        menu.add_pages(leagues_embeds)
+        # add additional buttons
+        buttons = [*nav_buttons, major_leagues_button, primary_leagues_button, all_leagues_button]
+        menu.add_buttons(buttons)
+        menu.add_pages(primary_leagues_embeds)  # landing pages
         await menu.start()
 
+    # create a slash command to get the standings
+    @app_commands.command(name='standings', description='Get the standings for all the major leagues')
+    async def standings(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        major_league_ids = self.lolesports._get_major_league_ids()
+        message = self.lolesports.display_standings(major_league_ids, timeframe= "summer_2023", to_str=True)
+        await interaction.followup.send(f"```{message}```")
     
 async def setup(client: commands.Bot) -> None:
     await client.add_cog(Query(client))

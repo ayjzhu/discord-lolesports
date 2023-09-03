@@ -4,10 +4,8 @@ from dotenv import load_dotenv
 from enum import Enum
 import pandas as pd
 from typing import Optional, Union, List 
-
+# from constants import Region
 load_dotenv()
-# API_BASE = os.getenv('API_BASE')
-# X_API_KEY = os.getenv('X_API_KEY')
 class Region(Enum):
     LPL = 98767991314006698
     LCK = 98767991310872058
@@ -20,12 +18,11 @@ class LolEsports:
     # optional region parameter
     def __init__(self, region: Region = Region.LEC):
         self.api_base = os.getenv('API_BASE')
-        self.x_api_key = os.getenv('X_API_KEY')
         self.region = region
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
             'Referer': 'https://lolesports.com/',
-            "x-api-key": self.x_api_key
+            "x-api-key": os.getenv('X_API_KEY')
         }
 
     def get_live(self) -> str:
@@ -176,12 +173,12 @@ class LolEsports:
         else:
             return major_leagues.to_dict(orient='records'), popular_leagues.to_dict(orient='records'), primary_leagues.to_dict(orient='records')
 
-    def get_tournaments(self, region_ids: Union[int, List[int]]) -> dict:
+    def get_tournaments(self, league_ids: Union[int, List[int]]) -> dict:
         """Get all the esports tournaments from a region
 
         Parameters
         ----------
-        region_ids: `int` or `list` of `int`
+        league_ids: `int` or `list` of `int`
             The region_id(s) to get the tournaments from.
 
         Returns
@@ -190,16 +187,16 @@ class LolEsports:
             A dictionary of esports tournaments
         ---
         """
-        if isinstance(region_ids, int):
-            league_ids = [region_ids]  # Convert a single league_id to a list
-        elif isinstance(region_ids, list):
-            league_ids = region_ids  # Use the provided list of league_ids
+        if isinstance(league_ids, int):
+            regions_ids = [league_ids]  # Convert a single league_id to a list
+        elif isinstance(league_ids, list):
+            regions_ids = league_ids  # Use the provided list of league_ids
         else:
             raise ValueError("Invalid parameter type. Expected int or list of int.")
 
         payload = {
             'hl': 'en-US',
-            'leagueId': ','.join(map(str, league_ids))
+            'leagueId': ','.join(map(str, regions_ids))
         }
         url = f'{self.api_base}/getTournamentsForLeague'
         response = requests.get(url, params=payload, headers=self.headers)
@@ -224,7 +221,6 @@ class LolEsports:
             A list of tournaments that match the timeframe
         ---
         """
-
         matching_tournaments = []
         tournaments_data = data['data']['leagues']
 
@@ -274,12 +270,12 @@ class LolEsports:
             rankings.append({season:ranking})
         return rankings
 
-    def display_standings(self, region_ids: Union[int, List[int]], timeframe: str, to_str: bool = False) -> Optional[str]:
+    def display_standings(self, league_ids: Union[int, List[int]], timeframe: str, to_str: bool = False) -> Optional[str]:
         """Display the standings of a tournament
         
         Parameters
         ----------
-        region_ids: `int` or `list` of `int`
+        league_ids: `int` or `list` of `int`
             The region_id(s) to get the tournaments from.
         timeframe: `str`
             The timeframe to extract the tournaments from
@@ -294,7 +290,7 @@ class LolEsports:
         """
         # this function calls get_tournaments, extract_tournaments_by_timeframe, get_standings and then display the standings
         # get the tournaments
-        tournaments = self.get_tournaments(region_ids)
+        tournaments = self.get_tournaments(league_ids)
         # get the tournaments for the timeframe
         matching_tournaments = self._extract_tournaments_by_timeframe(tournaments, timeframe)
         # get the matching ids
@@ -319,6 +315,19 @@ class LolEsports:
             return standings_str
         else:
             print(standings_str)
+    
+    # create a helper function to get the major league ids from the constants file which are the first 4 items in the Region(Enum)
+    def _get_major_league_ids(self) -> list:
+        """ A helper to get the major league ids from the constants file which are the first 4 items in the Region(Enum)
+
+        Returns
+        -------
+        major_league_ids: `list`
+            A list of major league ids
+        ---
+        """
+        major_league_ids = [region.value for region in Region][:4]
+        return major_league_ids
 
 if __name__ == "__main__":
     lolesports = LolEsports(region=Region.LCS)
@@ -337,7 +346,7 @@ if __name__ == "__main__":
     #     print(league['name'])   # print the major, popular and pirmary leagues by name
 
     # test get_tournaments, _extract_tournaments_by_timeframe, and get_standings
-    major_regions_ids = [region.value for region in Region][:4]
+    major_regions_ids = lolesports._get_major_league_ids()
     timeframe = "summer_2023"
     # test display_standings
     lolesports.display_standings(major_regions_ids, timeframe, to_str=False)
