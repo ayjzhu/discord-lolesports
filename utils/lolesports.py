@@ -165,8 +165,9 @@ class LolEsports:
             major_leagues = leagues_df.loc[leagues_df['priority'] < 202]
             # 6 popular leagues: LCS, LEC, LCK, LPL, PCS, VCS
             popular_leagues = pd.concat([major_leagues, semi_leagues], ignore_index=True)
-            # 15 primary leagues: LCS, LEC, LCK, LPL, PCS, VCS, TCL, CBLOL, LLA, LCO, LJL, LCL, WORLDS, MSI, ALL_STAR_EVENT
-            primary_leagues = pd.concat([major_leagues, semi_leagues, minor_leagues], ignore_index=True)
+            # 15 primary leagues: LCS, LEC, LCK, LPL, PCS, VCS, TCL, CBLOL, LLA, LCO, LJL, LCL, WORLDS, MSI, ALL_STAR_EVENT, WQS
+            wqs = leagues_df[leagues_df['slug'] == 'wqs'] # world qualifier series
+            primary_leagues = pd.concat([major_leagues, semi_leagues, minor_leagues, wqs], ignore_index=True)
         except Exception as e:
             print(f'**`ERROR:`** {type(e).__name__} - {e}')
             return None

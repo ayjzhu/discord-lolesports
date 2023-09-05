@@ -5,7 +5,7 @@ import utils.lolesports as lol
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 import pytz
-from reactionmenu import ViewMenu, ViewButton
+from reactionmenu import ViewMenu, ViewButton, ViewSelect, Page
 
 class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
@@ -207,12 +207,84 @@ class Query(commands.Cog):
         await menu.start()
 
     # create a slash command to get the standings
-    @app_commands.command(name='standings', description='Get the standings for all the major leagues')
-    async def standings(self, interaction: discord.Interaction):
+    @app_commands.command(name='all-standings', description='Get the standings for all the major leagues')
+    @app_commands.describe(timeframe='The timeframe/keyword to get the standings for. [required] Defaults to summer_2023.')
+    async def all_standings(self, interaction: discord.Interaction, timeframe: str = 'summer_2023'):
         await interaction.response.defer()
         major_league_ids = self.lolesports._get_major_league_ids()
-        message = self.lolesports.display_standings(major_league_ids, timeframe= "summer_2023", to_str=True)
+        message = self.lolesports.display_standings(major_league_ids, timeframe=timeframe, to_str=True)
         await interaction.followup.send(f"```{message}```")
+    
+    # create a slash command to get the standings of a specific league
+    @app_commands.command(name='standings', description='Get the standings for a specific league')
+    @app_commands.describe(league='The league to get the standings for. [required] Defaults to LCS.')
+    async def standings(self, interaction: discord.Interaction, league: str = 'LCS'):
+        # validate league
+        try:
+            keyword = lol.Region[league.upper()]
+        except KeyError as e:
+            print(f'**`ERROR:`** {type(e).__name__} - {e}')
+            await interaction.response.send_message(f'Invalid league: {league}')
+            return
+        await interaction.response.defer()
+        message = self.lolesports.display_standings([keyword.value], timeframe= "summer_2023", to_str=True)
+        await interaction.followup.send(f"```{message}```")
+        
+        leagues = self.lolesports.get_leagues(is_sorted=True)
+        if leagues is None:
+            await interaction.response.send_message('Something went wrong.')
+            return
+        major_leagues = self.lolesports._get_sub_leagues(leagues)[0]
+        print(major_leagues)
+
+        major_regions_ids = self.lolesports._get_major_league_ids()
+        timeframe = "summer_2023"
+
+        tournaments = self.lolesports.get_tournaments(major_regions_ids)
+        # get the tournaments for the timeframe
+        matching_tournaments = self.lolesports._extract_tournaments_by_timeframe(tournaments, timeframe)
+        # get the matching ids
+        matching_ids = [tournament['id'] for tournament in matching_tournaments]
+        # get the standings
+        standings = self.lolesports.get_standings(matching_ids)
+        # display the standings
+        standings_results = []
+        standings_titles = []
+        for standing in standings:
+            for standing_name, rankings in standing.items():
+                standings_titles.append(f"{standing_name}")
+                standding_str = ""
+                for ranking in rankings:    # ranking within each league
+                    ordinal = ranking['ordinal']
+                    team = ranking['teams'][0] # only one team per slot
+                    name = team['name']
+                    code = team['code']
+                    wins = team['record']['wins']
+                    losses = team['record']['losses']
+                    standding_str += f"\n{ordinal}. {name} ({code}): {wins}-{losses}"
+                standings_results.append(standding_str)
+
+        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed)
+        menu.add_page(discord.Embed(title="Seasonal Standings", color=discord.Color.dark_magenta()))
+
+        menu.add_select(ViewSelect(title="Select from the following leagues", options={
+            discord.SelectOption(label="LEC", emoji="<:lec:1148398301641703516>") : [
+                Page(embed=discord.Embed(title=f"{standings_titles[0]} Regular Season Standings", description=standings_results[0], color=discord.Color.teal()).set_thumbnail(url=major_leagues[1]['image'])),
+            ],
+            discord.SelectOption(label="LCK", emoji="<:lck:1148398360307433593>") : [
+                Page(embed=discord.Embed(title=f"{standings_titles[1]} Regular Season Standings", description=standings_results[1], color=discord.Color.from_rgb(255,255,255)).set_thumbnail(url=major_leagues[2]['image'])),
+            ],
+            discord.SelectOption(label="LCS", emoji="<:lcs:1148398424950063196>") : [
+                Page(embed=discord.Embed(title=f"{standings_titles[2]} Regular Season Standings", description=standings_results[2], color=discord.Color.blurple()).set_thumbnail(url=major_leagues[0]['image'])),
+            ],            
+            discord.SelectOption(label="LPL", emoji="<:lpl:1148398196683448380>") : [
+                Page(embed=discord.Embed(title=f"{standings_titles[3]} Regular Season Standings", description=standings_results[3], color=discord.Color.red()).set_thumbnail(url=major_leagues[3]['image'])),
+            ],
+        }))
+
+        menu.add_button(ViewButton.back())
+        menu.add_button(ViewButton.next())
+        await menu.start()        
     
 async def setup(client: commands.Bot) -> None:
     await client.add_cog(Query(client))
