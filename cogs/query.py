@@ -11,7 +11,7 @@ class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
         self.client = client
         self.TIMEZONE = 'US/Pacific'
-        self.lolesports = lol.LolEsports(region=lol.Region.LCS)
+        self.lolesports = lol.LolEsports(region='lcs')
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -211,7 +211,7 @@ class Query(commands.Cog):
     @app_commands.describe(timeframe='The timeframe/keyword to get the standings for. [required] Defaults to summer_2023.')
     async def all_standings(self, interaction: discord.Interaction, timeframe: str = 'summer_2023'):
         await interaction.response.defer()
-        major_league_ids = self.lolesports._get_major_league_ids()
+        major_league_ids = self.lolesports.get_major_league_ids()
         message = self.lolesports.display_standings(major_league_ids, timeframe=timeframe, to_str=True)
         await interaction.followup.send(f"```{message}```")
     
@@ -237,14 +237,14 @@ class Query(commands.Cog):
         major_leagues = self.lolesports._get_sub_leagues(leagues)[0]
         print(major_leagues)
 
-        major_regions_ids = self.lolesports._get_major_league_ids()
+        major_regions_ids = self.lolesports.get_major_league_ids()
         timeframe = "summer_2023"
 
         tournaments = self.lolesports.get_tournaments(major_regions_ids)
         # get the tournaments for the timeframe
-        matching_tournaments = self.lolesports._extract_tournaments_by_timeframe(tournaments, timeframe)
+        matching_tournaments = self.lolesports.extract_tournaments_by_timeframe(tournaments, timeframe)
         # get the matching ids
-        matching_ids = [tournament['id'] for tournament in matching_tournaments]
+        matching_ids = self.lolesports.extract_tournament_ids(matching_tournaments)
         # get the standings
         standings = self.lolesports.get_standings(matching_ids)
         # display the standings
