@@ -28,7 +28,7 @@ class Query(commands.Cog):
 
     @app_commands.command(name='live', description='Get the live events')
     async def live(self, interaction: discord.Interaction):
-        result = self.lolesports.get_live()
+        result = self.lolesports.live()
         await interaction.response.send_message(result)
     
     @app_commands.command(name='schedule', description='Get the schedule of upcoming events')
@@ -42,7 +42,7 @@ class Query(commands.Cog):
             print(f'**`ERROR:`** {type(e).__name__} - {e}')
             await interaction.response.send_message(f'Invalid region: {region}')
             return
-        data = self.lolesports.get_schedule(keyword)
+        data = self.lolesports.schedules(keyword)
         await interaction.response.defer(thinking=True)
         # create dataframe
         df = pd.DataFrame(data['data']['schedule']['events'])
@@ -111,7 +111,7 @@ class Query(commands.Cog):
     # using slash commands create the leagues command
     @app_commands.command(name='leagues', description='Display all the esports pro leagues and regions')
     async def leagues(self, interaction: discord.Interaction,):
-        leagues = self.lolesports.get_leagues(is_sorted=True)       
+        leagues = self.lolesports.leagues(is_sorted=True)       
         if leagues is None:
             await interaction.response.send_message('Something went wrong.')
             return
@@ -230,7 +230,7 @@ class Query(commands.Cog):
         message = self.lolesports.display_standings([keyword.value], timeframe= "summer_2023", to_str=True)
         await interaction.followup.send(f"```{message}```")
         
-        leagues = self.lolesports.get_leagues(is_sorted=True)
+        leagues = self.lolesports.leagues(is_sorted=True)
         if leagues is None:
             await interaction.response.send_message('Something went wrong.')
             return
@@ -240,13 +240,13 @@ class Query(commands.Cog):
         major_regions_ids = self.lolesports.get_major_league_ids()
         timeframe = "summer_2023"
 
-        tournaments = self.lolesports.get_tournaments(major_regions_ids)
+        tournaments = self.lolesports.tournaments(major_regions_ids)
         # get the tournaments for the timeframe
         matching_tournaments = self.lolesports.extract_tournaments_by_timeframe(tournaments, timeframe)
         # get the matching ids
         matching_ids = self.lolesports.extract_tournament_ids(matching_tournaments)
         # get the standings
-        standings = self.lolesports.get_standings(matching_ids)
+        standings = self.lolesports.standings(matching_ids)
         # display the standings
         standings_results = []
         standings_titles = []

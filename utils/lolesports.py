@@ -25,7 +25,8 @@ class LolEsports:
         self.league = Region[region.upper()]
         self.league_id = self.league.value
         self.timeframe = season
-        # self.teams = self.get_teams_mapping(self.tournaments_ids)
+        self.tournament_id = None
+        self.teams = None
 
     # an alternative constructor for passing in league id as an int
     @classmethod
@@ -64,8 +65,23 @@ class LolEsports:
         """
         return self.league_id
 
+    # retrive the teams from the current league if not already retrieved
+    def get_current_teams(self) -> dict:
+        """Get the teams from the current league
+
+        Returns
+        -------
+        teams: `dict`
+            A dictionary of teams with the code as the key and the slug as the value
+        ---
+        """
+        if self.teams is None:
+            current_tournament_id = self.get_current_tournament_id()
+            self.teams = self.get_teams_mapping(current_tournament_id)
+        return self.teams
+
     # create a get_current_tournament_id function which only has an optional timeframe to get the tournament id
-    def get_current_tournament_id(self, timeframe:str = None) -> int:
+    def get_current_tournament_id(self) -> int:
         """Get the current tournament id
 
         Parameters
@@ -79,52 +95,35 @@ class LolEsports:
             The current tournament id
         ---
         """
-        # set default timeframe to current timeframe if not provided
-        if timeframe is None:
-            timeframe = self.timeframe
-
-        # get the tournaments
-        tournaments = self.get_tournaments(self.league_id)
-        # get the tournaments for the timeframe
-        matching_tournaments = self.extract_tournaments_by_timeframe(tournaments, timeframe)
-        # get the matching ids
-        matching_ids = self.extract_tournament_ids(matching_tournaments)
-        # get the current tournament id
-        return matching_ids[0]
+        if self.tournament_id is None:
+            # get the tournament ids
+            tournament_ids = self.get_tournament_ids(self.league_id, self.timeframe)
+            # get the current tournament id
+            self.tournament_id = tournament_ids[-1]
+        return self.tournament_id
     
-
     # create a get_current_standings function which only needs the timeframe to get the standings
-    def get_current_standings(self, timeframe:str = None) -> List[dict]:
-        """Get the standings of a tournament
+    def get_current_standings(self) -> List[dict]:
+        """Get the current standings
 
         Parameters
         ----------
-        timeframe: `str`
-            The timeframe to extract the tournaments from
-            
+        None
+
         Returns
         -------
         rankings: `list` of `dict`
             A list of standings for each tournament
         ---
         """
-        print(timeframe)
-        # set default timeframe to current timeframe if not provided
-        if timeframe is None:
-            timeframe = self.timeframe
+        # get the current tournament id
+        current_tournament_id = self.get_current_tournament_id()
+        rankings = self.standings(current_tournament_id)
 
-        # get the tournaments
-        tournaments = self.get_tournaments(self.league_id)
-        # get the tournaments for the timeframe
-        matching_tournaments = self.extract_tournaments_by_timeframe(tournaments, timeframe)
-        # get the matching ids
-        matching_ids = self.extract_tournament_ids(matching_tournaments)
-        # get the standings
-        rankings = self.get_standings(matching_ids)
         return rankings
 
-    def get_live(self) -> str:
-        '''Get the live events
+    def live(self) -> str:
+        '''Fetch the live events
 
         Returns
         -------
@@ -136,7 +135,6 @@ class LolEsports:
         payload = {
             'hl': 'en-US'
         }
-
         url = f'{self.api_base}/getLive'
         response = requests.get(url, params=payload, headers=self.headers)
         print(response, response.url.split('/')[-1])   # print the url slug and the response code
@@ -159,8 +157,8 @@ class LolEsports:
         return result
 
     # make the region parameter optional
-    def get_schedule(self,  region: Region = None) -> dict:
-        '''Get the schedule of upcoming events
+    def schedules(self,  region: Region = None) -> dict:
+        '''Fetch the schedule of upcoming events
 
         Parameters
         ----------
@@ -187,8 +185,8 @@ class LolEsports:
         return response.json()
 
     # create a get esports league function
-    def get_leagues(self, is_sorted: bool = False) -> list: 
-        """Get all the esports leagues
+    def leagues(self, is_sorted: bool = False) -> list: 
+        """Fetch the esports leagues
 
         Parameters
         ----------
@@ -246,7 +244,7 @@ class LolEsports:
             A tuple of sub leagues :attr:`list` in the following order: major_leagues, popular_leagues, primary_leagues
         ---
         """
-        # leagues = self.get_leagues(is_sorted=True)
+        # leagues = self.leagues(is_sorted=True)
         leagues_df = pd.DataFrame(leagues)
         if leagues is None:
             return None
@@ -271,18 +269,22 @@ class LolEsports:
         else:
             return major_leagues.to_dict(orient='records'), popular_leagues.to_dict(orient='records'), primary_leagues.to_dict(orient='records')
 
-    def get_tournaments(self, league_ids: Union[int, List[int]]) -> dict:
-        """Get all the esports tournaments from a region
+    # now update the parameters to add the "timeframe" as an optional argument; when it is provided, return the tournaments that match with the timeframe, otherwise the raw tournament data
+    def tournaments(self, league_ids: Union[int, List[int]], timeframe: Optional[str] = None) -> dict:
+        """Fetch the tournaments of a given league(s)
 
         Parameters
         ----------
         league_ids: `int` or `list` of `int`
-            The league_id(s) to get the tournaments from.
+            The league_id(s) to get the tournaments from
+
+        timeframe[optional]: `str` [default: None]
+            The timeframe to extract the tournaments from. If not provided, return the raw tournament data
 
         Returns
         -------
-        tournaments: `dict`
-            A dictionary of esports tournaments
+        tournaments_data: `dict`
+            A dictionary of tournaments
         ---
         """
         if isinstance(league_ids, int):
@@ -300,11 +302,15 @@ class LolEsports:
         response = requests.get(url, params=payload, headers=self.headers)
         print(response, response.url.split('/')[-1])   # print the url slug and the response code
         tournaments_data = response.json()['data']['leagues']
+
+        # if timeframe is provided, extract the tournaments that match with the timeframe
+        if timeframe:
+            tournaments_data = self.extract_tournaments_by_timeframe(tournaments_data, timeframe)
         return tournaments_data
 
-    # create a helper function to extract tournaments by timeframe
+    # create a helper function to extract tournaments by timeframe; timeframe is default to current timeframe
     @staticmethod
-    def extract_tournaments_by_timeframe(tournaments_data: list, timeframe: str) -> list:
+    def extract_tournaments_by_timeframe(tournaments_data: list, timeframe: str = None) -> list:
         """ A staic helper to extract tournaments by timeframe
 
         Parameters
@@ -319,22 +325,22 @@ class LolEsports:
         matching_tournaments: `list`
             A list of tournaments that match the timeframe
         """
+        # set default timeframe to current timeframe if not provided
+        if timeframe is None:
+            timeframe = self.timeframe
         matching_tournaments = []
-
         for item in tournaments_data:
             tournaments = item.get('tournaments', [])
             for tournament in tournaments:
                 slug = tournament.get('slug', '')
                 if timeframe in slug:
                     matching_tournaments.append(tournament)
-
         return matching_tournaments
     
-    # create a staic helper function to extract tournaments ids in a list of tournaments
-    # the tournaments can be two types of either a list of tournaments or a list of matching tournaments
     @staticmethod
     def extract_tournament_ids(tournaments: list) -> list:
-        """ A static helper to extract tournaments ids in a list of tournaments
+        """ A static helper to extract tournaments ids in a list of tournaments which can be two 
+                types of either a list of tournaments or a list of matching tournaments
 
         Parameters
         ----------
@@ -354,10 +360,34 @@ class LolEsports:
             else:
                 tournament_ids.append(int(tournament['id'])) 
         return tournament_ids
-    
 
-    def get_standings(self, tournament_id: Union[int, List[int]]) -> List[dict]:
-        """Get the standings of a tournament
+    # create a get tournaments id which takes in the timeframe and league ids and returns the tournament id(s)
+    def get_tournament_ids(self, league_ids: Union[int, List[int]], timeframe: str = None) -> list:
+        """Get the tournament ids of a given league(s)
+
+        Parameters
+        ----------
+        league_ids: `int` or `list` of `int`
+            The league_id(s) to get the tournaments from.
+        timeframe: `str`
+            The timeframe to extract the tournaments from
+
+        Returns
+        -------
+        tournament_ids: `list`
+            A list of tournament ids
+        ---
+        """
+        if timeframe is None:
+            timeframe = self.timeframe
+        # get the tournaments
+        tournaments = self.tournaments(league_ids, timeframe)
+        # get the matching ids
+        tournament_ids = self.extract_tournament_ids(tournaments)
+        return tournament_ids
+
+    def standings(self, tournament_id: Union[int, List[int]]) -> List[dict]:
+        """Fetch the standings of a tournament
 
         Parameters
         ----------
@@ -411,15 +441,15 @@ class LolEsports:
             The standings as a string
         ---
         """
-        # this function calls get_tournaments, extract_tournaments_by_timeframe, get_standings and then display the standings
+        # this function calls tournaments, extract_tournaments_by_timeframe, standings and then display the standings
         # get the tournaments
-        tournaments = self.get_tournaments(league_ids)
+        tournaments = self.tournaments(league_ids)
         # get the tournaments for the timeframe
         matching_tournaments = self.extract_tournaments_by_timeframe(tournaments, timeframe)
         # get the matching ids
         matching_ids = self.extract_tournament_ids(matching_tournaments)
         # get the standings
-        standings = self.get_standings(matching_ids)
+        standings = self.standings(matching_ids)
         # display the standings
         standings_str = ""
         for standing in standings:
@@ -453,7 +483,7 @@ class LolEsports:
         return major_league_ids
 
     def get_teams_mapping(self, tournament_ids: Union[int, List[int]], to_sort: bool = False) -> dict:
-        """Get the teams mapping from the current league
+        """Get the teams mapping from the given tournament id(s) using the standings
 
         Parameters
         ----------
@@ -469,9 +499,7 @@ class LolEsports:
         """
         if isinstance(tournament_ids, int):
             tournament_ids = [tournament_ids]
-        standings = []
-        for tournament_id in tournament_ids:
-            standings.extend(self.get_standings(tournament_id))
+        standings = self.standings(tournament_ids)
         teams = {}
         # Iterate through the list and extract the code-to-slug mapping
         for standing in standings:
@@ -481,17 +509,14 @@ class LolEsports:
                         code = team['code']
                         slug = team['slug']
                         teams[code.lower()] = slug
-
         if to_sort:
             # sort the code-to-slug mapping alphabetically
             teams = dict(sorted(teams.items()))
-
         return teams
 
-    # create a helper static function to get the teams mapping from the given league(s)
-    @staticmethod
-    def get_teams_mapping_from_leagues(league_ids: Union[int, List[int]], to_sort: bool = False) -> dict:
-        """ A static helper to get the teams mapping from the given league(s)
+    # create a helper function to get the teams mapping from the given league(s)
+    def get_teams_mapping_from_leagues(self, league_ids: Union[int, List[int]], to_sort: bool = False) -> dict:
+        """Get the teams mapping from the given league(s)
 
         Parameters
         ----------
@@ -507,42 +532,28 @@ class LolEsports:
         """
         if isinstance(league_ids, int):
             league_ids = [league_ids]
-        teams = {}
-        for league_id in league_ids:
-            lolesports = LolEsports.from_league_id(league_id)
-            teams.update(lolesports.get_teams_mapping(lolesports.get_current_tournament_id(), to_sort))
+        tournament_ids = self.get_tournament_ids(league_ids, self.timeframe) # get the matching tournament ids
+        teams = self.get_teams_mapping(tournament_ids, to_sort) # get the teams mapping
         return teams
 
-    # create a function to exact teams from the current league
-    def get_current_teams(self) -> dict:
-        """Get the teams from the current league
-
-        Returns
-        -------
-        teams: `dict`
-            A dictionary of teams with the code as the key and the slug as the value
-        """
-        current_tournament_id = self.get_current_tournament_id()
-        teams = self.get_teams_mapping(current_tournament_id)
-        return teams
 
 if __name__ == "__main__":
     lolesports = LolEsports('lec')
-    # # test get_live
-    # print(lolesports.get_live())
-    # # test get_schedule
-    # print(lolesports.get_schedule(Region.LCK)['data']['schedule']['events'][-1])
-    # # test get_leagues
+    # # test live
+    # print(lolesports.live())
+    # # test schedules
+    # print(lolesports.schedules(Region.LCK)['data']['schedule']['events'][-1])
+    # # test leagues
     # # print the first 16 leagues by name
-    # leagues = lolesports.get_leagues(is_sorted=True)
+    # leagues = lolesports.leagues(is_sorted=True)
     # for league in leagues[:16]:
     #     print(league['name'])
     # # test get_sub_leagues
-    # sub_leagues = lolesports.get_sub_leagues(lolesports.get_leagues(is_sorted=True))[0]
+    # sub_leagues = lolesports.get_sub_leagues(lolesports.leagues(is_sorted=True))[0]
     # for league in sub_leagues:
     #     print(league['name'])   # print the major, popular and pirmary leagues by name
 
-    # test get_tournaments, extract_tournaments_by_timeframe, and get_standings
+    # test tournaments, extract_tournaments_by_timeframe, and standings
     # major_regions_ids = lolesports._get_major_league_ids()
     # timeframe = "summer_2023"
     #test display_standings
@@ -553,7 +564,7 @@ if __name__ == "__main__":
     # print(standings)
 
     # test static helper function extract_tournament_ids
-    # tournaments = lolesports.get_tournaments(Region.LPL.value)
+    # tournaments = lolesports.tournaments(Region.LPL.value)
     # matching_tournaments = lolesports.extract_tournaments_by_timeframe(tournaments, 'summer_2023')
     # tournament_ids = LolEsports.extract_tournament_ids(matching_tournaments)
     # print(tournament_ids)
@@ -562,9 +573,23 @@ if __name__ == "__main__":
     # print(lolesports.get_current_tournament_id())
 
     # test get_teams_mapping
-    teams = lolesports.get_current_teams()
+    teams = lolesports.get_teams_mapping(lolesports.get_current_tournament_id(), to_sort=False)
     print(teams)
 
-    # test get_teams_mapping_from_leagues
-    teams = lolesports.get_teams_mapping_from_leagues([Region.LCK.value, Region.LCS.value])
-    print(teams)
+    # # test get_teams_mapping_from_leagues
+    # teams = lolesports.get_teams_mapping_from_leagues(lolesports.get_league_id(), to_sort=False)
+    # print(teams)
+
+    # # test getters
+    # print(lolesports.get_league_id())
+    # print(lolesports.get_current_tournament_id())
+    # print(lolesports.get_current_teams())
+    # print(lolesports.get_current_standings())
+
+    # # test tournaments
+    # tournaments = lolesports.tournaments(LolEsports.get_major_league_ids() , 'spring_2021')
+    # print(tournaments)
+
+    # # test get_tournament_ids
+    # tournament_ids = lolesports.get_tournament_ids(Region.LPL.value, 'spring_2021')
+    # print(tournament_ids)
