@@ -535,10 +535,79 @@ class LolEsports:
         tournament_ids = self.get_tournament_ids(league_ids, self.timeframe) # get the matching tournament ids
         teams = self.get_teams_mapping(tournament_ids, to_sort) # get the teams mapping
         return teams
+    
+    # an api function to get detail info of a team
+    def team(self, team_slug: str) -> dict:
+        """Get the detail info of a team
 
+        Parameters
+        ----------
+        team_slug: `str`
+            The team slug to get the info from
+
+        Returns
+        -------
+        team_info: `dict`
+            A dictionary of team info
+        """
+        payload = {
+            'hl': 'en-US',
+            'id': team_slug
+        }
+        url = f'{self.api_base}/getTeams'
+        response = requests.get(url, params=payload, headers=self.headers)
+        print(response, response.url.split('/')[-1])
+        team_info = response.json()['data']['teams'][0]
+        return team_info
+
+    def get_roster(self, team_info: dict) -> dict:
+        """ Extract the player roster from the team info
+
+        Parameters
+        ----------
+        team_info: `dict`
+            A dictionary of team info
+
+        Returns
+        -------
+        roster: `dict`
+            A dictionary of player roster
+        """
+        players = team_info['players']
+        for player in players:
+            player.update({'fullname': f'{player["firstName"]} "{player["summonerName"]}" {player["lastName"]}'})
+        return players
+    
+    # an api function to get the event list of a team
+    def event_list(self, team_slug: str) -> dict:
+        """Get the event list of a team
+
+        Parameters
+        ----------
+        team_slug: `str`
+            The team slug to get the info from
+
+        Returns
+        -------
+        event_list: `dict`
+            A dictionary of event list
+        """
+        payload = {
+            'hl': 'en-US',
+            'teamId': team_slug
+        }
+        url = f'{self.api_base}/getEventList'
+        response = requests.get(url, params=payload, headers=self.headers)
+        print(response, response.url.split('/')[-1])
+        event_list = response.json()['data']['esports']['events']
+        return event_list
 
 if __name__ == "__main__":
     lolesports = LolEsports('lec')
+    # get the majour leagues teams mapping using get_teams_mapping
+    tournament_ids = lolesports.get_tournament_ids(lolesports.get_major_league_ids(), 'summer_2023')
+    major_teams = lolesports.get_teams_mapping(tournament_ids)
+
     # # test live
     # print(lolesports.live())
     # # test schedules
@@ -572,9 +641,9 @@ if __name__ == "__main__":
     # # test get_current_tournament_id
     # print(lolesports.get_current_tournament_id())
 
-    # test get_teams_mapping
-    teams = lolesports.get_teams_mapping(lolesports.get_current_tournament_id(), to_sort=False)
-    print(teams)
+    # # test get_teams_mapping
+    # teams = lolesports.get_teams_mapping(lolesports.get_current_tournament_id(), to_sort=False)
+    # print(teams)
 
     # # test get_teams_mapping_from_leagues
     # teams = lolesports.get_teams_mapping_from_leagues(lolesports.get_league_id(), to_sort=False)
@@ -593,3 +662,12 @@ if __name__ == "__main__":
     # # test get_tournament_ids
     # tournament_ids = lolesports.get_tournament_ids(Region.LPL.value, 'spring_2021')
     # print(tournament_ids)
+
+    # test team info
+    # team = lolesports.team(major_teams['ig'])
+    # roster = lolesports._get_roster(team)
+    # print(roster)
+
+    # test event list
+    events = lolesports.event_list(major_teams['gg'])
+    print(events)
