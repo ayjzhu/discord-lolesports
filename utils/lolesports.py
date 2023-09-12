@@ -13,6 +13,8 @@ class Region(Enum):
     LCS = 98767991299243165
     PCS = 104366947889790212
     WORLDS = 98767975604431411
+    MSI = 98767991325878492
+    WQS = 10988878756156222
 
 class LolEsports:
     def __init__(self, region: str = 'LEC', season: str = 'summer_2023'):
@@ -268,6 +270,28 @@ class LolEsports:
             return None
         else:
             return major_leagues.to_dict(orient='records'), popular_leagues.to_dict(orient='records'), primary_leagues.to_dict(orient='records')
+
+
+    def get_image_url(self, league_name: str) -> str:
+        """Get the image url of a given league
+
+        Parameters
+        ----------
+        league_name: `str`
+            The name of the league to get the image url from
+            
+        Returns
+        -------
+        image_url: `str`
+            The image url of the league
+        ---
+        """
+        league_data = self.leagues(is_sorted=True)
+        for league in league_data:
+            if league['name'] == league_name.upper():
+                return league['image']
+        return None  # Return None if no match is found
+
 
     # now update the parameters to add the "timeframe" as an optional argument; when it is provided, return the tournaments that match with the timeframe, otherwise the raw tournament data
     def tournaments(self, league_ids: Union[int, List[int]], timeframe: Optional[str] = None) -> dict:
@@ -601,73 +625,3 @@ class LolEsports:
         print(response, response.url.split('/')[-1])
         event_list = response.json()['data']['esports']['events']
         return event_list
-
-if __name__ == "__main__":
-    lolesports = LolEsports('lec')
-    # get the majour leagues teams mapping using get_teams_mapping
-    tournament_ids = lolesports.get_tournament_ids(lolesports.get_major_league_ids(), 'summer_2023')
-    major_teams = lolesports.get_teams_mapping(tournament_ids)
-
-    # # test live
-    # print(lolesports.live())
-    # # test schedules
-    # print(lolesports.schedules(Region.LCK)['data']['schedule']['events'][-1])
-    # # test leagues
-    # # print the first 16 leagues by name
-    # leagues = lolesports.leagues(is_sorted=True)
-    # for league in leagues[:16]:
-    #     print(league['name'])
-    # # test get_sub_leagues
-    # sub_leagues = lolesports.get_sub_leagues(lolesports.leagues(is_sorted=True))[0]
-    # for league in sub_leagues:
-    #     print(league['name'])   # print the major, popular and pirmary leagues by name
-
-    # test tournaments, extract_tournaments_by_timeframe, and standings
-    # major_regions_ids = lolesports._get_major_league_ids()
-    # timeframe = "summer_2023"
-    #test display_standings
-    # lolesports.display_standings(major_regions_ids, timeframe, to_str=False)
-
-    # # get current standings
-    # standings = lolesports.get_current_standings()
-    # print(standings)
-
-    # test static helper function extract_tournament_ids
-    # tournaments = lolesports.tournaments(Region.LPL.value)
-    # matching_tournaments = lolesports.extract_tournaments_by_timeframe(tournaments, 'summer_2023')
-    # tournament_ids = LolEsports.extract_tournament_ids(matching_tournaments)
-    # print(tournament_ids)
-
-    # # test get_current_tournament_id
-    # print(lolesports.get_current_tournament_id())
-
-    # # test get_teams_mapping
-    # teams = lolesports.get_teams_mapping(lolesports.get_current_tournament_id(), to_sort=False)
-    # print(teams)
-
-    # # test get_teams_mapping_from_leagues
-    # teams = lolesports.get_teams_mapping_from_leagues(lolesports.get_league_id(), to_sort=False)
-    # print(teams)
-
-    # # test getters
-    # print(lolesports.get_league_id())
-    # print(lolesports.get_current_tournament_id())
-    # print(lolesports.get_current_teams())
-    # print(lolesports.get_current_standings())
-
-    # # test tournaments
-    # tournaments = lolesports.tournaments(LolEsports.get_major_league_ids() , 'spring_2021')
-    # print(tournaments)
-
-    # # test get_tournament_ids
-    # tournament_ids = lolesports.get_tournament_ids(Region.LPL.value, 'spring_2021')
-    # print(tournament_ids)
-
-    # test team info
-    # team = lolesports.team(major_teams['ig'])
-    # roster = lolesports._get_roster(team)
-    # print(roster)
-
-    # test event list
-    events = lolesports.event_list(major_teams['gg'])
-    print(events)

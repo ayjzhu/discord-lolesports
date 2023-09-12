@@ -17,7 +17,7 @@ class Query(commands.Cog):
     async def on_ready(self):
         print('Query commands are ready.')    
     
-    def convert_timezone(self, time_str:str, timezone:str = 'US/Pacific'):
+    def _convert_timezone(self, time_str:str, timezone:str = 'US/Pacific'):
         # Parse input string as a datetime object in UTC
         utc_timestamp = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
         # Convert the UTC timestamp to PST
@@ -25,6 +25,21 @@ class Query(commands.Cog):
         # Format the PST timestamp without timezone offset, seconds and convert to 12 hr format
         pst_timestamp = pst_timestamp.strftime("%Y-%m-%d %H:%M %p")
         return pst_timestamp
+    
+    # set the embed color based on the region: LCS = blurple, LEC = teal, LCK = white, LPL = red
+    @staticmethod
+    def get_region_color(region: str) -> discord.Color:
+        region = region.upper()
+        if region == 'LCS':
+            return discord.Color.blurple()
+        elif region == 'LEC':
+            return discord.Color.teal()
+        elif region == 'LCK':
+            return discord.Color.from_rgb(255,255,255)
+        elif region == 'LPL':
+            return discord.Color.red()
+        else:
+            return discord.Color.random()
 
     @app_commands.command(name='live', description='Get the live events')
     async def live(self, interaction: discord.Interaction):
@@ -62,7 +77,7 @@ class Query(commands.Cog):
             embed.add_field(name='Teams', value=teams_str, inline=False)
 
             embed.add_field(name='Start time',
-                            value= f"{self.convert_timezone(row['startTime'], self.TIMEZONE)} ({row['state']})", 
+                            value= f"{self._convert_timezone(row['startTime'], self.TIMEZONE)} ({row['state']})", 
                             inline=False)
             embed.add_field(name='League', value=row['league']['name'], inline=True)
             embed.add_field(name='Stage', value=row['blockName'], inline=True)
@@ -235,8 +250,6 @@ class Query(commands.Cog):
             await interaction.response.send_message('Something went wrong.')
             return
         major_leagues = self.lolesports._get_sub_leagues(leagues)[0]
-        print(major_leagues)
-
         major_regions_ids = self.lolesports.get_major_league_ids()
         timeframe = "summer_2023"
 
@@ -269,22 +282,55 @@ class Query(commands.Cog):
 
         menu.add_select(ViewSelect(title="Select from the following leagues", options={
             discord.SelectOption(label="LEC", emoji="<:lec:1148398301641703516>") : [
-                Page(embed=discord.Embed(title=f"{standings_titles[0]} Regular Season Standings", description=standings_results[0], color=discord.Color.teal()).set_thumbnail(url=major_leagues[1]['image'])),
+                Page(embed=discord.Embed(title=f"{standings_titles[0]} Regular Season Standings", description=standings_results[0], color=self.get_region_color("LEC")).set_thumbnail(url=major_leagues[1]['image'])),
             ],
             discord.SelectOption(label="LCK", emoji="<:lck:1148398360307433593>") : [
-                Page(embed=discord.Embed(title=f"{standings_titles[1]} Regular Season Standings", description=standings_results[1], color=discord.Color.from_rgb(255,255,255)).set_thumbnail(url=major_leagues[2]['image'])),
+                Page(embed=discord.Embed(title=f"{standings_titles[1]} Regular Season Standings", description=standings_results[1], color=self.get_region_color("LCK")).set_thumbnail(url=major_leagues[2]['image'])),
             ],
             discord.SelectOption(label="LCS", emoji="<:lcs:1148398424950063196>") : [
-                Page(embed=discord.Embed(title=f"{standings_titles[2]} Regular Season Standings", description=standings_results[2], color=discord.Color.blurple()).set_thumbnail(url=major_leagues[0]['image'])),
+                Page(embed=discord.Embed(title=f"{standings_titles[2]} Regular Season Standings", description=standings_results[2], color=self.get_region_color("LCS")).set_thumbnail(url=major_leagues[0]['image'])),
             ],            
             discord.SelectOption(label="LPL", emoji="<:lpl:1148398196683448380>") : [
-                Page(embed=discord.Embed(title=f"{standings_titles[3]} Regular Season Standings", description=standings_results[3], color=discord.Color.red()).set_thumbnail(url=major_leagues[3]['image'])),
+                Page(embed=discord.Embed(title=f"{standings_titles[3]} Regular Season Standings", description=standings_results[3], color=self.get_region_color("LPL")).set_thumbnail(url=major_leagues[3]['image'])),
             ],
         }))
 
         menu.add_button(ViewButton.back())
         menu.add_button(ViewButton.next())
-        await menu.start()        
+        await menu.start()
+
+    # create a slash command to get the players and info for a specific team
+    @app_commands.command(name='team', description='Get the players and info for a specific team')
+    @app_commands.describe(team_code='The team code of the given team. [required] (ex. C9, edg, t1...)')
+    async def team_info(self, interaction: discord.Interaction, team_code: str):
+        # initialize the team object and get the teams mappping for the major leagues
+        major_league_ids = self.lolesports.get_major_league_ids()
+        major_teams = self.lolesports.get_teams_mapping_from_leagues(major_league_ids)
+        await interaction.response.defer()
+        team_slug = team_code.lower()   # lowercase the team code
+        # check if the team code is valid
+        if team_slug not in major_teams:
+            await interaction.followup.send(f'Invalid team code: {team_code}')
+            return
+        team = self.lolesports.team(major_teams[team_slug])
+        roster = self.lolesports.get_roster(team)
+        league = team['homeLeague']['name']
+        embed = discord.Embed(title=f"{team['name']}",
+            color=self.get_region_color(league),
+            url=f"https://lolesports.com/team/{team['slug']}"
+        )
+        # set the author to the the region icon and region name
+        embed.set_author(name=f"{league} Esports Team", 
+                        icon_url= self.lolesports.get_image_url(league))
+        embed.add_field(name='Code', value=team['code'], inline=True)
+        embed.add_field(name='Region', value=team['homeLeague']['region'], inline=True)
+        embed.add_field(name='League', value=league, inline=True)
+        embed.add_field(name='Players', value=len(roster), inline=True)
+        embed.add_field(name='ID', value=team['id'], inline=True)
+        embed.set_image(url=team['image'])
+        embed.set_footer(text="Powered by Riot Games", icon_url='https://static.developer.riotgames.com/img/logo.png')
+        await interaction.followup.send(embed=embed)
+
     
 async def setup(client: commands.Bot) -> None:
     await client.add_cog(Query(client))
