@@ -625,3 +625,80 @@ class LolEsports:
         print(response, response.url.split('/')[-1])
         event_list = response.json()['data']['esports']['events']
         return event_list
+    
+    def matches_with_vods(self, tournament_ids:Union[int, List[int]]) -> List[dict]:
+        """Get the matches with available vods of a tournament. Only available for the completed matches
+
+        Parameters
+        ----------
+        tournament_id: `int`
+            The tournament id to get the matches from
+
+        Returns
+        -------
+        matches: `list` of `dict`
+            A list of matches with the vods
+        """
+        if isinstance(tournament_ids, int):
+            tournament_ids = [tournament_ids]  # Convert a single league_id to a list
+        elif isinstance(tournament_ids, list):
+            pass  # Use the provided list of league_ids
+        else:
+            raise ValueError("Invalid parameter type. Expected int or list of int.")
+
+        payload = {
+            'hl': 'en-US',
+            'tournamentId': ','.join(map(str, tournament_ids)),
+        }
+        url = f'{self.api_base}/getVods'
+        response = requests.get(url, params=payload, headers=self.headers)
+        print(response, response.url.split('/')[-1])
+        matches = response.json()['data']['schedule']['events']
+        return matches
+    
+    def match_details(self, match_id: int) -> dict:
+        """Get the match details of a match
+
+        Parameters
+        ----------
+        match_id: `int`
+            The match id to get the details from
+
+        Returns
+        -------
+        match_details: `dict`
+            A dictionary of match details
+        """
+        payload = {
+            'hl': 'en-US',
+            'id': match_id
+        }
+        url = f'{self.api_base}/getEventDetails'
+        response = requests.get(url, params=payload, headers=self.headers)
+        print(response, response.url.split('/')[-1])
+        match_details = response.json()
+        return match_details
+
+    # recent 20 matches
+    def recent_matches(self, league_id: int) -> List[dict]:
+        """Get the recent 20 matches of a league
+
+        Parameters
+        ----------
+        league_id: `int`
+            The league id to get the matches from
+
+        Returns
+        -------
+        recent_matches: `list` of `dict`
+            A list of recent matches
+        """
+        payload = {
+            'hl': 'en-US',
+            'leagueId': league_id
+        }
+        url = f'{self.api_base}/getVodsForHome'
+        response = requests.get(url, params=payload, headers=self.headers)
+        print(response, response.url.split('/')[-1])
+        recent_matches = response.json()['data']['schedule']['events']
+        return recent_matches
