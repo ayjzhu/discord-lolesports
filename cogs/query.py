@@ -40,6 +40,26 @@ class Query(commands.Cog):
             return discord.Color.red()
         else:
             return discord.Color.random()
+    
+    # set emoji based on the player role
+    @staticmethod
+    def get_player_emoji(role: str) -> str:
+        role = role.lower()
+        emoji = ''
+        if role == 'top':
+            emoji = '↖'
+        elif role == 'jungle':
+            emoji = '🌴'
+        elif role == 'mid':
+            emoji = '↗'
+        elif role == 'bottom':
+            emoji = '↘'
+        elif role == 'support':
+            emoji = '🍼'
+        else:
+            emoji = '🌟'
+        return emoji
+
 
     @app_commands.command(name='live', description='Get the live events')
     async def live(self, interaction: discord.Interaction):
@@ -315,13 +335,14 @@ class Query(commands.Cog):
         team = self.lolesports.team(major_teams[team_slug])
         roster = self.lolesports.get_roster(team)
         league = team['homeLeague']['name']
+        league_image = self.lolesports.get_image_url(league)
         embed = discord.Embed(title=f"{team['name']}",
             color=self.get_region_color(league),
             url=f"https://lolesports.com/team/{team['slug']}"
         )
         # set the author to the the region icon and region name
         embed.set_author(name=f"{league} Esports Team", 
-                        icon_url= self.lolesports.get_image_url(league))
+                        icon_url= league_image)
         embed.add_field(name='Code', value=team['code'], inline=True)
         embed.add_field(name='Region', value=team['homeLeague']['region'], inline=True)
         embed.add_field(name='League', value=league, inline=True)
@@ -329,7 +350,34 @@ class Query(commands.Cog):
         embed.add_field(name='ID', value=team['id'], inline=True)
         embed.set_image(url=team['image'])
         embed.set_footer(text="Powered by Riot Games", icon_url='https://static.developer.riotgames.com/img/logo.png')
-        await interaction.followup.send(embed=embed)
+        # await interaction.followup.send(embed=embed)
+
+        # create a select menu to display the players
+        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed, show_page_director=False)
+        # menu.add_page(discord.Embed(title=f"{team['name']} Roster", color=self.get_region_color(league)))
+        menu.add_page(embed)
+        menu.add_select(ViewSelect(title="View full roster", options={
+            # set the role to "fill" if its
+            discord.SelectOption(label=f"{player['summonerName']} ({player['role'].title() if player['role'] != 'none' else 'Fill'})", emoji="{}".format(self.get_player_emoji(player['role']))) : [
+                # embed for each player contains first + last name, summoner name, role as field
+                Page(embed=discord.Embed(
+                        title=player['fullname'],
+                        color=self.get_region_color(league)
+                        ).set_image(url=player['image'])
+                        # set the author to the team icon and team name
+                        .set_author(name=f"{team['name']} Roster", icon_url=team['image'])
+                        .add_field(name='Name', value=f'{player["firstName"]} {player["lastName"]}', inline=True)
+                        .add_field(name='Role', value=player['role'].title() if player['role'] != 'none' else 'Fill', inline=True)
+                        # set the footer to the league
+                        # .set_footer(text=f"{team['name']} | {league}", icon_url=team['image'])
+                        .set_footer(text=f"{league} Esports Team", icon_url=league_image)
+
+                )
+            ] for player in roster
+        }))
+        menu.add_button(ViewButton.back())
+        menu.add_button(ViewButton.next())
+        await menu.start()
 
     
 async def setup(client: commands.Bot) -> None:
