@@ -321,7 +321,7 @@ class Query(commands.Cog):
 
     # create a slash command to get the players and info for a specific team
     @app_commands.command(name='team', description='Get the players and info for a specific team')
-    @app_commands.describe(team_code='The team code of the given team. [required] (ex. C9, edg, t1...)')
+    @app_commands.describe(team_code='The team code of the given team. [required] (ex. C9, edg, t1, fnc...)')
     async def team_info(self, interaction: discord.Interaction, team_code: str):
         # initialize the team object and get the teams mappping for the major leagues
         major_league_ids = self.lolesports.get_major_league_ids()
@@ -350,33 +350,39 @@ class Query(commands.Cog):
         embed.add_field(name='ID', value=team['id'], inline=True)
         embed.set_image(url=team['image'])
         embed.set_footer(text="Powered by Riot Games", icon_url='https://static.developer.riotgames.com/img/logo.png')
-        # await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
         # create a select menu to display the players
+        select = ViewSelect(title="View full roster", options={
+                    # set the role to "fill" if its
+                    discord.SelectOption(label=f"{player['summonerName']} ({player['role'].title() if player['role'] != 'none' else 'Fill'})",
+                        emoji="{}".format(self.get_player_emoji(player['role']))) : [
+                        # embed for each player contains first + last name, summoner name, role as field
+                            Page(embed=discord.Embed(
+                                    title=player['fullname'],
+                                    color=self.get_region_color(league)
+                                    ).set_image(url=player['image'])
+                                    # set the author to the team icon and team name
+                                    .set_author(name=f"{team['name']}", icon_url=team['image'])
+                                    .add_field(name='Name', value=f'{player["firstName"]} {player["lastName"]}', inline=True)
+                                    .add_field(name='Role', value=player['role'].title() if player['role'] != 'none' else 'Fill', inline=True)
+                                    # set the footer to the league
+                                    # .set_footer(text=f"{team['name']} | {league}", icon_url=team['image'])
+                                    .set_footer(text=f"{league} Esports Team", icon_url=league_image)
+                            )
+                        ] for player in roster
+                })
         menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed, show_page_director=False)
-        # menu.add_page(discord.Embed(title=f"{team['name']} Roster", color=self.get_region_color(league)))
-        menu.add_page(embed)
-        menu.add_select(ViewSelect(title="View full roster", options={
-            # set the role to "fill" if its
-            discord.SelectOption(label=f"{player['summonerName']} ({player['role'].title() if player['role'] != 'none' else 'Fill'})", emoji="{}".format(self.get_player_emoji(player['role']))) : [
-                # embed for each player contains first + last name, summoner name, role as field
-                Page(embed=discord.Embed(
-                        title=player['fullname'],
-                        color=self.get_region_color(league)
-                        ).set_image(url=player['image'])
-                        # set the author to the team icon and team name
-                        .set_author(name=f"{team['name']} Roster", icon_url=team['image'])
-                        .add_field(name='Name', value=f'{player["firstName"]} {player["lastName"]}', inline=True)
-                        .add_field(name='Role', value=player['role'].title() if player['role'] != 'none' else 'Fill', inline=True)
-                        # set the footer to the league
-                        # .set_footer(text=f"{team['name']} | {league}", icon_url=team['image'])
-                        .set_footer(text=f"{league} Esports Team", icon_url=league_image)
-
-                )
-            ] for player in roster
-        }))
-        menu.add_button(ViewButton.back())
-        menu.add_button(ViewButton.next())
+        menu.add_select(select)
+        menu.add_page(discord.Embed(
+            title=f"Team roster for {team['code']}", 
+            description=f"{len(roster)} players in total.",
+            color=self.get_region_color(league))
+            .set_author(name=team['name'], icon_url=team['image'])
+        )
+        words = team['slug'].split('-')
+        wiki_slug = '_'.join(word.capitalize() for word in words)   # Capitalize each word and join them with underscores
+        menu.add_button(ViewButton(style=discord.ButtonStyle.link, emoji='📖', label='Wiki', url=f"https://lol.fandom.com/wiki/{wiki_slug}"))
         await menu.start()
 
     

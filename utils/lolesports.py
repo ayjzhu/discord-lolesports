@@ -441,7 +441,7 @@ class LolEsports:
         rankings = []
         for standing in standings:
             slugs = standing['slug'].split('_')   # get the season name to use as key
-            season = ' '.join(slug.capitalize() for slug in slugs)
+            season = ' '.join(slug.upper() for slug in slugs)
             stages = standing['stages']                    # only regular season has rankings
             ranking = stages[0]['sections'][0]['rankings'] # stage 0: regular season; only 1 section
             rankings.append({season:ranking})
