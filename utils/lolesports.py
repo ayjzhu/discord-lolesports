@@ -14,7 +14,7 @@ class Region(Enum):
     PCS = 104366947889790212
     WORLDS = 98767975604431411
     MSI = 98767991325878492
-    WQS = 10988878756156222
+    WQS = 110988878756156222
 
 class LolEsports:
     def __init__(self, region: str = 'LEC', season: str = 'summer_2023'):
@@ -255,14 +255,18 @@ class LolEsports:
             vcs_index = leagues_df[leagues_df['name'] == 'VCS'].index[0]
             # Extract the row with "VCS" and "PCS" (the row below it)
             semi_leagues = leagues_df.loc[vcs_index:vcs_index+1]
-            # 9 minor_leagues & international: TCL, CBLOL, LLA, LCO, LJL, LCL, WORLDS, MSI, ALL_STAR_EVENT
+            # 6 minor_leagues & international: CBLOL, LLA, LJL, WORLDS, MSI, ALL_STAR_EVENT
             minor_leagues = leagues_df.loc[(leagues_df['priority'] < 1000) & (leagues_df['priority'] > 201)]
+            # Exclude LCL, LCO and TCL from the minor leagues
+            lcl_index = minor_leagues.loc[minor_leagues['name'] == 'LCL'].index[0]
+            tcl_index = minor_leagues.loc[minor_leagues['name'] == 'TCL'].index[0]
+            minor_leagues = minor_leagues.drop([lcl_index, lcl_index+1, tcl_index]).reset_index(drop=True)
 
             # 4 major leagues: LCS, LEC, LCK, LPL
             major_leagues = leagues_df.loc[leagues_df['priority'] < 202]
             # 6 popular leagues: LCS, LEC, LCK, LPL, PCS, VCS
             popular_leagues = pd.concat([major_leagues, semi_leagues], ignore_index=True)
-            # 15 primary leagues: LCS, LEC, LCK, LPL, PCS, VCS, TCL, CBLOL, LLA, LCO, LJL, LCL, WORLDS, MSI, ALL_STAR_EVENT, WQS
+            # 13 primary leagues: LCS, LEC, LCK, LPL, PCS, VCS, CBLOL, LLA, LJL, WORLDS, MSI, ALL_STAR_EVENT, WQS
             wqs = leagues_df[leagues_df['slug'] == 'wqs'] # world qualifier series
             primary_leagues = pd.concat([major_leagues, semi_leagues, minor_leagues, wqs], ignore_index=True)
         except Exception as e:
@@ -402,8 +406,6 @@ class LolEsports:
             A list of tournament ids
         ---
         """
-        if timeframe is None:
-            timeframe = self.timeframe
         # get the tournaments
         tournaments = self.tournaments(league_ids, timeframe)
         # get the matching ids
@@ -602,30 +604,136 @@ class LolEsports:
             player.update({'fullname': f'{player["firstName"]} "{player["summonerName"]}" {player["lastName"]}'})
         return players
     
-    # an api function to get the event list of a team
-    def event_list(self, team_slug: str) -> dict:
-        """Get the event list of a team
+    # an api function to get the event list of a team or a league
+    def eventlists(self, team_slug:Optional[str] = None, league_ids:Union[int, List[int]] = None) -> List[dict]:
+        """Get the event list of a team or a league
 
         Parameters
         ----------
-        team_slug: `str`
-            The team slug to get the info from
+        team_slug: `str`[optional]
+            The team slug to get the event list from.
 
+        league_ids: `int` or `list` of `int`
+            The league_id(s) to get the event list from.
+            
         Returns
         -------
-        event_list: `dict`
-            A dictionary of event list
+        events: `list` of `dict`
+            A list of events
         """
-        payload = {
-            'hl': 'en-US',
-            'teamId': team_slug
-        }
+        if team_slug:
+            payload = {
+                'hl': 'en-US',
+                'teamId': team_slug
+            }
+        elif league_ids is not None:
+            if isinstance(league_ids, int):
+                league_ids = [league_ids]
+            elif isinstance(league_ids, list):
+                pass
+            else:
+                raise ValueError("Invalid parameter type. Expected int or list of int.")
+                
+            payload = {
+                'hl': 'en-US',
+                'leagueId': ','.join(map(str, league_ids))
+            }
+        else:
+            raise ValueError("Either team_slug or league_ids must be provided")
         url = f'{self.api_base}/getEventList'
         response = requests.get(url, params=payload, headers=self.headers)
         print(response, response.url.split('/')[-1])
-        event_list = response.json()['data']['esports']['events']
-        return event_list
-    
+        events = response.json()['data']['esports']['events']
+        return events
+
+    def matches(self, tournament_id: Union[int, List[int]]) -> List[dict]:
+        """Get the matches of a tournament
+
+        Parameters
+        ----------
+        tournament_id: `int` or `list` of `int`
+            The tournament_id(s) to get the matches from.
+
+        Returns
+        -------
+        matches_list: `list` of `dict`
+            A list of matches
+        """
+        if isinstance(tournament_id, int):
+            tournament_id = [tournament_id]  # Convert a single league_id to a list
+        elif isinstance(tournament_id, list):
+            pass  # Use the provided list of league_ids
+        else:
+            raise ValueError("Invalid parameter type. Expected int or list of int.")
+        payload = {
+            'hl': 'en-US',
+            'tournamentId' : ','.join(map(str, tournament_id)),
+        }
+
+        url = f'{self.api_base}/getStandings'
+        response = requests.get(url, params=payload, headers=self.headers)
+        print(response, response.url.split('/')[-1])
+        matches_list = response.json()['data']['standings'][0]['stages'][0]['sections'][0]['matches']
+        return matches_list
+
+    @staticmethod
+    def get_team_records(team_code, matches, by_game=False, ascending=False) -> List[str]:
+        '''Get the team records by each individual game or by a match series
+
+        Parameters
+        ----------
+        team_code: `str`
+            The team code to get the records from
+
+        matches: `list` of `dict`
+            A list of matches
+
+        by_game: `bool`, optional (default=False)
+            Whether to get the team records by each individual game or by a match series
+
+        ascending: `bool`, optional (default=False)
+            Whether to sort the records in ascending order or descending order
+
+        Returns
+        -------
+        result_strings: `list` of `str`
+            A list of team records
+        '''
+        records = {}
+        total_wins = 0
+        total_losses = 0
+        team_code = team_code.upper()
+        for match in matches:
+            for team in match['teams']:
+                if team['code'] == team_code:
+                    opponent = next(t for t in match['teams'] if t != team)
+                    opponent_name = opponent['code']
+
+                    if opponent_name not in records:
+                        records[opponent_name] = [0, 0]
+
+                    if by_game:
+                        records[opponent_name][0] += team['result']['gameWins']
+                        records[opponent_name][1] += opponent['result']['gameWins']
+                        total_wins  += team['result']['gameWins']
+                        total_losses += opponent['result']['gameWins']
+                    else:
+                        if team['result']['outcome'] == 'win':
+                            records[opponent_name][0] += 1
+                            total_wins += 1
+                        else:
+                            records[opponent_name][1] += 1
+                            total_losses += 1
+
+        # sort the records in descending order by default
+        sorted_records = sorted(records.items(), key=lambda x: x[1][0], reverse=not ascending)
+        result_strings = [f"{team_code} {w}-{l} {opp}" for opp, [w, l] in sorted_records]
+        winrate = total_wins / (total_wins + total_losses) * 100
+        # add the total wins and losses and the winrate to the last 2 items in the list
+        result_strings.append(f"Total: {total_wins}-{total_losses}")
+        result_strings.append(f"Win Rate: {winrate:.1f}%")
+        return result_strings      
+
     def matches_with_vods(self, tournament_ids:Union[int, List[int]]) -> List[dict]:
         """Get the matches with available vods of a tournament. Only available for the completed matches
 
