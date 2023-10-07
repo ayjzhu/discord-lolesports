@@ -6,6 +6,10 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 import pytz
 from reactionmenu import ViewMenu, ViewButton, ViewSelect, Page
+import random
+import requests
+from io import BytesIO
+import asyncio
 
 class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
@@ -47,17 +51,17 @@ class Query(commands.Cog):
         role = role.lower()
         emoji = ''
         if role == 'top':
-            emoji = '↖'
+            emoji = '<:Top:1059504144085418086>'
         elif role == 'jungle':
-            emoji = '🌴'
+            emoji = '<:Jungle:1059504139572359279>'
         elif role == 'mid':
-            emoji = '↗'
+            emoji = '<:Middle:1059504141606588477>'
         elif role == 'bottom':
-            emoji = '↘'
+            emoji = '<:Bottom:1059504138494410752>'
         elif role == 'support':
-            emoji = '🍼'
+            emoji = '<:Support:1059504142994911324>'
         else:
-            emoji = '🌟'
+            emoji = '<:Fill:1059577540445999214>'
         return emoji
 
 
@@ -355,7 +359,7 @@ class Query(commands.Cog):
         # create a select menu to display the players
         select = ViewSelect(title="View full roster", options={
                     # set the role to "fill" if its
-                    discord.SelectOption(label=f"{player['summonerName']} ({player['role'].title() if player['role'] != 'none' else 'Fill'})",
+                    discord.SelectOption(label=f"{player['summonerName']}",
                         emoji="{}".format(self.get_player_emoji(player['role']))) : [
                         # embed for each player contains first + last name, summoner name, role as field
                             Page(embed=discord.Embed(
@@ -365,14 +369,14 @@ class Query(commands.Cog):
                                     # set the author to the team icon and team name
                                     .set_author(name=f"{team['name']}", icon_url=team['image'])
                                     .add_field(name='Name', value=f'{player["firstName"]} {player["lastName"]}', inline=True)
-                                    .add_field(name='Role', value=player['role'].title() if player['role'] != 'none' else 'Fill', inline=True)
+                                    .add_field(name='Role', value=f"{self.get_player_emoji(player['role'])} {player['role'].title() if player['role'] != 'none' else 'Fill'}", inline=True)
                                     # set the footer to the league
                                     # .set_footer(text=f"{team['name']} | {league}", icon_url=team['image'])
                                     .set_footer(text=f"{league} Esports Team", icon_url=league_image)
                             )
                         ] for player in roster
                 })
-        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed, show_page_director=False)
+        menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed, show_page_director=False) 
         menu.add_select(select)
         menu.add_page(discord.Embed(
             title=f"Team roster for {team['code']}", 
@@ -385,6 +389,6 @@ class Query(commands.Cog):
         menu.add_button(ViewButton(style=discord.ButtonStyle.link, emoji='📖', label='Wiki', url=f"https://lol.fandom.com/wiki/{wiki_slug}"))
         await menu.start()
 
-    
+
 async def setup(client: commands.Bot) -> None:
     await client.add_cog(Query(client))
