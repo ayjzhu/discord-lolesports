@@ -3,7 +3,7 @@ import requests
 from dotenv import load_dotenv
 from enum import Enum
 import pandas as pd
-from typing import Optional, Union, List 
+from typing import Optional, Union, List, Literal
 # from constants import Region
 load_dotenv()
 class Region(Enum):

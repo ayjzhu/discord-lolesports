@@ -6,10 +6,8 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 import pytz
 from reactionmenu import ViewMenu, ViewButton, ViewSelect, Page
-import random
-import requests
-from io import BytesIO
-import asyncio
+from typing import Optional, Union, List, Literal
+import utils.constants as const
 
 class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
@@ -353,7 +351,7 @@ class Query(commands.Cog):
         embed.add_field(name='Players', value=len(roster), inline=True)
         embed.add_field(name='ID', value=team['id'], inline=True)
         embed.set_image(url=team['image'])
-        embed.set_footer(text="Powered by Riot Games", icon_url='https://static.developer.riotgames.com/img/logo.png')
+        embed.set_footer(text="Powered by LoL Esports", icon_url=const.LOL_ESPORTS_ICON)
         await interaction.followup.send(embed=embed)
 
         # create a select menu to display the players
@@ -388,6 +386,64 @@ class Query(commands.Cog):
         wiki_slug = '_'.join(word.capitalize() for word in words)   # Capitalize each word and join them with underscores
         menu.add_button(ViewButton(style=discord.ButtonStyle.link, emoji='📖', label='Wiki', url=f"https://lol.fandom.com/wiki/{wiki_slug}"))
         await menu.start()
+
+    # helper function to create embeds for the two teams
+    def _create_event_embeds(self, events: List) -> list:
+        '''Create embeds for the two teams'''
+        embeds = []
+        team_codes = []
+        for event in events[:1]: 
+            leauge = event['league']
+            for team in event['match']['teams']:
+                embeds.append(discord.Embed(url=f"https://lolesports.com/schedule?leagues={leauge['slug']}").set_image(url=team['image']))
+                team_codes.append(team['code'])
+                
+        embeds[0].title = f"{team_codes[0]} vs {team_codes[-1]}"    
+        embeds[0].color = discord.Color.random()
+        embeds[0].set_author(name=f"{events[0]['league']['name']}",
+                            icon_url=const.LOL_ESPORTS_ICON)
+        embeds[0].add_field(name='Start time', value= f"{self._convert_timezone(events[0]['startTime'], self.TIMEZONE)}", inline=True)
+        embeds[0].add_field(name='League', value=events[0]['league']['slug'].upper(), inline=True)
+        embeds[0].add_field(name='ID', value=events[0]['league']['id'], inline=True)
+        # add the team codes to the embed
+        for index, team_code in enumerate(team_codes):
+            embeds[0].add_field(name=f'Team {index+1}', value=team_code, inline=True)
+        embeds[0].set_footer(text="Powered by Riot Games", icon_url=const.RIOT_ICON)
+        return embeds
+
+
+    # create a slash command to get the upcoming events for a specific team or league
+    @app_commands.command(name='events', description='Get the upcoming events for a specific team or league')
+    @app_commands.describe(league='(Optional) The league/region of the given leagues. Default to international leagues.', 
+                           team_code='(Optional) The team code of the given team.(ex. C9, edg, t1, fnc...)')
+    async def upcoming_events(self, interaction: discord.Interaction,  team_code: Optional[str] = None, league: Optional[const.RegionStr] = const.RegionStr.INTL):
+
+        # process the league id
+        if league.name == 'INTL':
+            league_id = [int(_id) for _id in league.value.split(',')]
+        else:
+            league_id = int(league.value)
+        print('league id', league_id)
+        
+        # prioritize the team code over the league if both are given
+        if team_code:
+            major_league_ids = self.lolesports.get_major_league_ids()
+            major_teams = self.lolesports.get_teams_mapping_from_leagues(major_league_ids)
+            team_slug = team_code.lower()   # lowercase the team code
+            # check if the team code is valid
+            if team_slug not in major_teams:
+                await interaction.response.send_message(f'Invalid team code: `{team_code}`! Please try again.')
+                return
+            events = self.lolesports.eventlists(team_slug=major_teams[team_slug])
+        else:
+            events = self.lolesports.eventlists(league_ids=league_id)
+        # check if the list is empty
+        if not events:
+            await interaction.response.send_message('There are no upcoming events for this `team` or `league`. Come back later! 😊') 
+            return
+        
+        embeds = self._create_event_embeds(events)
+        await interaction.response.send_message('teams', embeds=embeds)
 
 
 async def setup(client: commands.Bot) -> None:
