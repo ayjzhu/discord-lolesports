@@ -1,5 +1,9 @@
 from enum import Enum
 
+# icon url constants
+LOL_ESPORTS_ICON = r"https://am-a.akamaihd.net/image?resize=140:&f=http%3A%2F%2Fstatic.lolesports.com%2Fteams%2F1681281407829_LOLESPORTSICON.png"
+RIOT_ICON = 'https://static.developer.riotgames.com/img/logo.png'        
+
 # contains all the popular regions
 class Region(Enum):
     LCS = 98767991299243165
@@ -16,6 +20,18 @@ class Region(Enum):
     LCL = 98767991355908944
     WORLDS = 98767975604431411
     MSI = 98767991325878492
+    WQS = 110988878756156222
+
+class RegionStr(Enum):
+    LPL = '98767991314006698'
+    LCK = '98767991310872058'
+    LEC = '98767991302996019'
+    LCS = '98767991299243165'
+    PCS = '104366947889790212'
+    WORLDS = '98767975604431411'
+    MSI = '98767991325878492'
+    WQS = '110988878756156222'
+    INTL = '98767975604431411, 98767991325878492, 110988878756156222'
 
 
 # contains all the regions and their respective ids
