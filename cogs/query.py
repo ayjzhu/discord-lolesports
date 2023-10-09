@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import utils.lolesports as lol
-import pandas as pd
 from datetime import datetime, timezone, timedelta
 import pytz
 from reactionmenu import ViewMenu, ViewButton, ViewSelect, Page
@@ -69,9 +68,8 @@ class Query(commands.Cog):
         await interaction.response.send_message(result)
     
     @app_commands.command(name='schedule', description='Get the schedule of upcoming events')
-    @app_commands.describe(region='The region to get the schedule for. [required] Defaults to LEC.')
-    async def schedule(self, interaction: discord.Interaction, region: str = 'LEC'):
-        print(region)
+    @app_commands.describe(region='The region to get the schedule for. [optional] Defaults to WORLDS.')
+    async def schedule(self, interaction: discord.Interaction, region: Optional[str] = 'WORLDS'):
         # validate region
         try:
             keyword = lol.Region[region.upper()]
@@ -79,38 +77,35 @@ class Query(commands.Cog):
             print(f'**`ERROR:`** {type(e).__name__} - {e}')
             await interaction.response.send_message(f'Invalid region: {region}')
             return
-        data = self.lolesports.schedules(keyword)
+        events = self.lolesports.schedules(keyword.value)
         await interaction.response.defer(thinking=True)
-        # create dataframe
-        df = pd.DataFrame(data['data']['schedule']['events'])
-        # unstarted_df = df[df['state'] == 'unstarted'].reset_index(drop=True)
+        
         menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed)
-        for index, row in df.iterrows():
-            # create new embed if the current embed is filled
-            embed = discord.Embed(title=f"Schedule for \"{keyword.name}\":", 
-                description = f"Upcoming matches for the {df['league'].iloc[0]['name']}",
+        for event in events:
+            teams = [(team['name'], team['code']) for team in event['match']['teams']]
+            state = 'Upcoming' if event['state'] == 'unstarted' else 'Completed'
+            embed = discord.Embed(title=event['league']['name'],
+                description = f"{state} match",
                 color = discord.Color.teal(),
                 # set the timestamp to the current time in PST time
                 timestamp = datetime.now(timezone(timedelta(hours=-7))))
-            embed.set_footer(text="Time shown in {}".format(self.TIMEZONE))   
-        
-            teams = [(team['name'], team['code']) for team in row['match']['teams']]
-            teams_str = ' vs '.join([f'{name}({code})' for name, code in teams])
-            embed.add_field(name='Teams', value=teams_str, inline=False)
-
+            embed.set_footer(text="Timezone in {}".format(self.TIMEZONE))
+            # set author image to team 1 image
+            embed.set_author(name=' vs '.join([code for _, code in teams]), icon_url=event['match']['teams'][0]['image'])
+            # set thumbnail to team 2 image
+            embed.set_thumbnail(url=event['match']['teams'][1]['image'])
             embed.add_field(name='Start time',
-                            value= f"{self._convert_timezone(row['startTime'], self.TIMEZONE)} ({row['state']})", 
+                            value= f"{self._convert_timezone(event['startTime'], self.TIMEZONE)}", 
                             inline=False)
-            embed.add_field(name='League', value=row['league']['name'], inline=True)
-            embed.add_field(name='Stage', value=row['blockName'], inline=True)
+            # add field for each team
+            for index, team in enumerate(teams):
+                    embed.add_field(name=f'Team {index+1}', value=f'{team[0]} ({team[1]})', inline=True)    
+            # add a blank field 
+            embed.insert_field_at(2, name='\u200b', value='\u200b', inline=True)    #\uFEFF                   
+            embed.add_field(name='League', value=event['league']['name'], inline=True)
+            embed.add_field(name='Stage', value=event['blockName'], inline=True)
             # add a strategy field with the format of bestOf 5
-            embed.add_field(name='Format', value=f"{row['match']['strategy']['type']} {row['match']['strategy']['count']}", inline=True)
-            # only add this field if its not the last row
-            if index != len(df) - 1:
-                embed.add_field(name="\uFEFF", value="Next up", inline=False)
-
-            # add the embed to the menu for every 4 rows or there are less than 4 rows in the dataframe
-            # if len(unstarted_df) < 5 or (index % 4 == 0 and index != 0):
+            embed.add_field(name='Format', value=f"{event['match']['strategy']['type']} {event['match']['strategy']['count']}", inline=True)
             menu.add_page(embed)
             
         menu.add_button(ViewButton.go_to_first_page())
@@ -118,7 +113,6 @@ class Query(commands.Cog):
         menu.add_button(ViewButton(style=discord.ButtonStyle.primary, label='Next', custom_id=ViewButton.ID_NEXT_PAGE))
         menu.add_button(ViewButton.go_to_last_page())
         menu.add_button(ViewButton.end_session())
-        # await interaction.response.send_message(content='Upcoming games')
         await menu.start()
 
     # helper function to create embeds for the leagues
@@ -398,7 +392,7 @@ class Query(commands.Cog):
                 embeds.append(discord.Embed(url=f"https://lolesports.com/schedule?leagues={leauge['slug']}").set_image(url=team['image']))
                 team_codes.append(team['code'])
                 
-        embeds[0].title = f"{team_codes[0]} vs {team_codes[-1]}"    
+        embeds[0].title = f"{team_codes[0]} vs {team_codes[-1]}"
         embeds[0].color = discord.Color.random()
         embeds[0].set_author(name=f"{events[0]['league']['name']}",
                             icon_url=const.LOL_ESPORTS_ICON)

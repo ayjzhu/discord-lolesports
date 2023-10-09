@@ -17,7 +17,7 @@ class Region(Enum):
     WQS = 110988878756156222
 
 class LolEsports:
-    def __init__(self, region: str = 'LEC', season: str = 'summer_2023'):
+    def __init__(self, region: str = 'WORLD', season: str = 'summer_2023'):
         self.api_base = os.getenv('API_BASE')
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
@@ -158,33 +158,39 @@ class LolEsports:
 
         return result
 
-    # make the region parameter optional
-    def schedules(self,  region: Region = None) -> dict:
-        '''Fetch the schedule of upcoming events
+    def schedules(self, league_ids: Union[str, int, List[int]] = None ) -> List[dict]:
+        """Fetch the schedules of a given league(s)
 
         Parameters
         ----------
-        region: :class:`Region`
-            The region to get the schedule for. Defaults to LEC
+        league_ids: `int` | `list` of `int` | `str` | `list` of `str`
+            The league_id(s) to get the schedules from.
 
         Returns
         -------
-        schedule: `dict`
-            The schedule of upcoming events
+        schedules: `list` of `dict`
+            A list of schedule of the recent events (80 events in total)
         ---
-        '''
-        if region is None:
-            region = self.region
+        """
+        if league_ids is None:
+            league_ids = self.league_id
+        elif isinstance(league_ids, int):
+            league_ids = [league_ids]  # Convert a single league_id to a list
+        elif isinstance(league_ids, str):
+            league_ids = [league_ids]
+        elif isinstance(league_ids, list):
+            pass  # Use the provided list of league_ids
+        else:
+            raise ValueError("Invalid parameter type. Expected int or list of int.")
         payload = {
             'hl': 'en-US',
-            'leagueId': region.value
+            'leagueId': ','.join(str(_id) for _id in league_ids)
         }
-
         url = f'{self.api_base}/getSchedule'
         response = requests.get(url, params=payload, headers=self.headers)
         print(response, response.url.split('/')[-1])   # print the url slug and the response code
-
-        return response.json()
+        schedules = response.json()['data']['schedule']['events']
+        return schedules    
 
     # create a get esports league function
     def leagues(self, is_sorted: bool = False) -> list: 
@@ -333,12 +339,11 @@ class LolEsports:
 
         # if timeframe is provided, extract the tournaments that match with the timeframe
         if timeframe:
-            tournaments_data = self.extract_tournaments_by_timeframe(tournaments_data, timeframe)
+            tournaments_data = self._extract_tournaments_by_timeframe(tournaments_data, timeframe)
         return tournaments_data
 
     # create a helper function to extract tournaments by timeframe; timeframe is default to current timeframe
-    @staticmethod
-    def extract_tournaments_by_timeframe(tournaments_data: list, timeframe: str = None) -> list:
+    def _extract_tournaments_by_timeframe(self, tournaments_data: dict, timeframe: str = None) -> list: 
         """ A staic helper to extract tournaments by timeframe
 
         Parameters
@@ -467,11 +472,11 @@ class LolEsports:
             The standings as a string
         ---
         """
-        # this function calls tournaments, extract_tournaments_by_timeframe, standings and then display the standings
+        # this function calls tournaments, _extract_tournaments_by_timeframe, standings and then display the standings
         # get the tournaments
         tournaments = self.tournaments(league_ids)
         # get the tournaments for the timeframe
-        matching_tournaments = self.extract_tournaments_by_timeframe(tournaments, timeframe)
+        matching_tournaments = self._extract_tournaments_by_timeframe(tournaments, timeframe)
         # get the matching ids
         matching_ids = self.extract_tournament_ids(matching_tournaments)
         # get the standings
