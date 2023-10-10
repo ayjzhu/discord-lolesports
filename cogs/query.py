@@ -12,7 +12,7 @@ class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
         self.client = client
         self.TIMEZONE = 'US/Pacific'
-        self.lolesports = lol.LolEsports(region='lcs')
+        self.lolesports = lol.LolEsports(region='lpl')
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -64,8 +64,62 @@ class Query(commands.Cog):
 
     @app_commands.command(name='live', description='Get the live events')
     async def live(self, interaction: discord.Interaction):
-        result = self.lolesports.live()
-        await interaction.response.send_message(result)
+        # result = self.lolesports.live_result()
+        # await interaction.response.send_message(result)
+        events = self.lolesports.live()
+        await interaction.response.defer(thinking=True)
+        # async with interaction.channel.typing():  
+        # check if the list is empty
+        if not events:
+            await interaction.response.send_message('There are no live events. Come back later! 😊') 
+            return
+            
+        print(events)
+        # send the embeds for each event
+        for event in events:
+            if event['type'] == 'show':
+                # send embed about the details of the show including streams
+                embed = discord.Embed(title=event['league']['name'],
+                    description = f"Live show",
+                    color = discord.Color.teal(),
+                    # set the timestamp to the current time in PST time
+                    timestamp = datetime.now(timezone(timedelta(hours=-7))))
+                embed.set_footer(text="Timezone in {}".format(self.TIMEZONE))
+                # set author image to team 1 image
+                embed.set_author(name=event['league']['name'], icon_url=event['league']['image'])
+                # set thumbnail to team 2 image
+                embed.set_thumbnail(url=event['league']['image'])
+
+                # add field for each stream
+                for stream in event['streams']:
+                    embed.add_field(name='Stream', value=f"[{stream['parameter']}](https://www.twitch.tv/{stream['parameter']})", inline=False)
+                
+            else:
+                teams = [(team['name'], team['code']) for team in event['match']['teams']]
+                state = 'Upcoming' if event['state'] == 'unstarted' else 'Completed'
+                embed = discord.Embed(title=event['league']['name'],
+                    description = f"{state} match",
+                    color = discord.Color.teal(),
+                    # set the timestamp to the current time in PST time
+                    timestamp = datetime.now(timezone(timedelta(hours=-7))))
+                embed.set_footer(text="Timezone in {}".format(self.TIMEZONE))
+                # set author image to team 1 image
+                embed.set_author(name=' vs '.join([code for _, code in teams]), icon_url=event['match']['teams'][0]['image'])
+                # set thumbnail to team 2 image
+                embed.set_thumbnail(url=event['match']['teams'][1]['image'])
+                embed.add_field(name='Start time',
+                                value= f"{self._convert_timezone(event['startTime'], self.TIMEZONE)}", 
+                                inline=False)
+                # add field for each team
+                for index, team in enumerate(teams):
+                    embed.add_field(name=f'Team {index+1}', value=f'{team[0]} ({team[1]})', inline=True)    
+                # add a blank field 
+                embed.insert_field_at(2, name='\u200b', value='\u200b', inline=True)
+                embed.add_field(name='League', value=event['league']['name'], inline=True)
+                embed.add_field(name='Stage', value=event['blockName'], inline=True)
+                # add a strategy field with the format of bestOf 5
+                embed.add_field(name='Format', value=f"{event['match']['strategy']['type']} {event['match']['strategy']['count']}", inline=True)
+            await interaction.followup.send(embed=embed)
     
     @app_commands.command(name='schedule', description='Get the schedule of upcoming events')
     @app_commands.describe(region='The region to get the schedule for. [optional] Defaults to WORLDS.')
@@ -82,6 +136,9 @@ class Query(commands.Cog):
         
         menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed)
         for event in events:
+            # skip the event that is a show in progress
+            if event['type'] == 'show':
+                continue
             teams = [(team['name'], team['code']) for team in event['match']['teams']]
             state = 'Upcoming' if event['state'] == 'unstarted' else 'Completed'
             embed = discord.Embed(title=event['league']['name'],
@@ -118,9 +175,6 @@ class Query(commands.Cog):
     # helper function to create embeds for the leagues
     def _create_league_embeds(self, leagues: list, color: discord.Color) -> list:
         '''Create embeds for the leagues'''
-        # icon url constants
-        LOL_ESPORTS_ICON = r"https://am-a.akamaihd.net/image?resize=140:&f=http%3A%2F%2Fstatic.lolesports.com%2Fteams%2F1681281407829_LOLESPORTSICON.png"
-        RIOT_ICON = 'https://static.developer.riotgames.com/img/logo.png'        
         # create an embed list to store all the embeds
         embeds = []
         for league in leagues:
@@ -129,12 +183,12 @@ class Query(commands.Cog):
                 url=f"https://lolesports.com/schedule?leagues={league['slug']}"
             )
             embed.set_author(name="LoL Esports League", 
-                            icon_url= LOL_ESPORTS_ICON)
+                            icon_url= const.LOL_ESPORTS_ICON)
             embed.add_field(name='Region', value=league['region'].title(), inline=False)
             embed.add_field(name='Schedules', value=f"[Click here](https://lolesports.com/schedule?leagues={league['slug']})", inline=True)
             embed.add_field(name='ID', value=league['id'], inline=True)
             embed.set_image(url=league['image'])
-            embed.set_footer(text="Powered by Riot Games", icon_url=RIOT_ICON)
+            embed.set_footer(text="Powered by Riot Games", icon_url=const.RIOT_ICON)
             embeds.append(embed)
 
         return embeds
@@ -271,7 +325,7 @@ class Query(commands.Cog):
 
         tournaments = self.lolesports.tournaments(major_regions_ids)
         # get the tournaments for the timeframe
-        matching_tournaments = self.lolesports.extract_tournaments_by_timeframe(tournaments, timeframe)
+        matching_tournaments = self.lolesports._extract_tournaments_by_timeframe(tournaments, timeframe)
         # get the matching ids
         matching_ids = self.lolesports.extract_tournament_ids(matching_tournaments)
         # get the standings

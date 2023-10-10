@@ -123,8 +123,27 @@ class LolEsports:
         rankings = self.standings(current_tournament_id)
 
         return rankings
+    
+    # fetch live events; return a list of live events
+    def live(self) -> List[dict]:
+        """Get the live events
 
-    def live(self) -> str:
+        Returns
+        -------
+        live_events: `list` of `dict`
+            A list of live events
+        ---
+        """
+        payload = {
+            'hl': 'en-US'
+        }
+        url = f'{self.api_base}/getLive'
+        response = requests.get(url, params=payload, headers=self.headers)
+        print(response, response.url.split('/')[-1])
+        live_events = response.json()['data']['schedule']['events']
+        return live_events
+
+    def live_result(self) -> str:
         '''Fetch the live events
 
         Returns
