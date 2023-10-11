@@ -667,8 +667,12 @@ class LolEsports:
         url = f'{self.api_base}/getEventList'
         response = requests.get(url, params=payload, headers=self.headers)
         print(response, response.url.split('/')[-1])
-        events = response.json()['data']['esports']['events']
-        return events
+        events = response.json()
+        # retunr none if no events
+        if not events['data']['esports']:
+            return None
+        else:
+            return events['data']['esports']['events']
 
     def matches(self, tournament_id: Union[int, List[int]]) -> List[dict]:
         """Get the matches of a tournament

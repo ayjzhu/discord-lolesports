@@ -1,8 +1,12 @@
 from enum import Enum
 
 # icon url constants
-LOL_ESPORTS_ICON = r"https://am-a.akamaihd.net/image?resize=140:&f=http%3A%2F%2Fstatic.lolesports.com%2Fteams%2F1681281407829_LOLESPORTSICON.png"
-RIOT_ICON = 'https://static.developer.riotgames.com/img/logo.png'        
+ICONS = {
+    'lolesports_teal' : r"https://am-a.akamaihd.net/image?resize=140:&f=http%3A%2F%2Fstatic.lolesports.com%2Fteams%2F1681281407829_LOLESPORTSICON.png",
+    'riot' : 'https://static.developer.riotgames.com/img/logo.png',
+    'worlds' : 'http://static.lolesports.com/leagues/1592594612171_WorldsDarkBG.png',
+    'lolesports' : 'https://static.lolesports.com/leagues/1693555886600_lolesports_icon_ice-01.png',
+}
 
 # contains all the popular regions
 class Region(Enum):
@@ -75,4 +79,5 @@ class AllRegion(Enum):
     ULTRALIGA = 105266088231437431
     TFT_RISING_LEGENDS = 108001239847565215
 
-
+MAJOR_TEAMS = {'g2': 'g2-esports', 'fnc': 'fnatic', 'xl': 'excel', 'th': 'team-heretics-lec', 'bds': 'team-bds', 'sk': 'sk-gaming', 'mad': 'mad-lions', 'koi': 'rogue', 'ast': 'astralis', 'vit': 'team-vitality', 'kt': 'kt-rolster', 'gen': 'geng', 'hle': 'hanwha-life-esports', 'dk': 'dwg-kia', 't1': 't1', 'drx': 'drx', 'lsb': 'liiv-sandbox', 'bro': 'fredit-brion', 'ns': 'nongshim-redforce', 'kdf': 'kwangdong-freecs', 'c9': 'cloud9', 'gg': 'golden-guardians', 'eg': 'evil-geniuses', 'tl': 'team-liquid', 'nrg': 'nrg-esports', 'tsm': 'tsm', 'dig': 'dignitas', '100': '100-thieves', 'fly': 'flyquest', 'imt': 'immortals-progressive', 'blg': 'bilibili-gaming', 'jdg': 'jd-gaming', 'lng': 'lng-esports', 'tes': 'top-esports', 'omg': 'oh-my-god', 'wbg': 'weibo-gaming', 'rng': 'royal-never-give-up', 'edg': 'edward-gaming', 'we': 'team-we', 'nip': 'victory-five', 'fpx': 'funplus-phoenix', 
+'ig': 'invictus-gaming', 'tt': 'thunder-talk-gaming', 'up': 'ultra-prime', 'ra': 'rare-atom', 'al': 'anyones-legend', 'lgd': 'lgd-gaming'}
