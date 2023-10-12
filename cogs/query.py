@@ -3,22 +3,25 @@ from discord.ext import commands
 from discord import app_commands
 import utils.lolesports as lol
 from datetime import datetime, timezone, timedelta
+import datetime as dt
 import pytz
 from reactionmenu import ViewMenu, ViewButton, ViewSelect, Page
 from typing import Optional, Union, List, Literal
-import utils.constants as const
+import utils.constants as consts
 
 class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
         self.client = client
         self.TIMEZONE = 'US/Pacific'
+        self.TIMZONE_OFFSET = 7
         self.lolesports = lol.LolEsports(region='lpl')
 
     @commands.Cog.listener()
     async def on_ready(self):
         print('Query commands are ready.')    
     
-    def _convert_timezone(self, time_str:str, timezone:str = 'US/Pacific'):
+    @staticmethod
+    def convert_timezone(time_str:str, timezone:str = 'US/Pacific'):
         # Parse input string as a datetime object in UTC
         utc_timestamp = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
         # Convert the UTC timestamp to PST
@@ -27,6 +30,25 @@ class Query(commands.Cog):
         pst_timestamp = pst_timestamp.strftime("%Y-%m-%d %H:%M %p")
         return pst_timestamp
     
+    @staticmethod
+    def convert_timedelta(iso_8601_time: str) -> str:
+        iso_8601_time = datetime.fromisoformat(iso_8601_time[:-1] + '+00:00')
+        now = datetime.now(dt.timezone.utc)
+        diff = iso_8601_time - now
+        if diff.total_seconds() < 0:
+            return 'past'
+        days = diff.days
+        hours, remainder = divmod(diff.seconds, 3600)
+        minutes = remainder // 60
+        output = []
+        if days > 0:
+            output.append(f"{days} days")
+        if hours > 0:
+            output.append(f"{hours} hours")
+        if minutes > 0:
+            output.append(f"{minutes} minutes")         
+        return ' '.join(output)
+
     # set the embed color based on the region: LCS = blurple, LEC = teal, LCK = white, LPL = red
     @staticmethod
     def get_region_color(region: str) -> discord.Color:
@@ -71,10 +93,11 @@ class Query(commands.Cog):
         # async with interaction.channel.typing():  
         # check if the list is empty
         if not events:
-            await interaction.response.send_message('There are no live events. Come back later! 😊') 
+            await interaction.followup.send('There are no live events. Come back later! 😊')
             return
             
         print(events)
+
         # send the embeds for each event
         for event in events:
             if event['type'] == 'show':
@@ -83,7 +106,7 @@ class Query(commands.Cog):
                     description = f"Live show",
                     color = discord.Color.teal(),
                     # set the timestamp to the current time in PST time
-                    timestamp = datetime.now(timezone(timedelta(hours=-7))))
+                    timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET))))
                 embed.set_footer(text="Timezone in {}".format(self.TIMEZONE))
                 # set author image to team 1 image
                 embed.set_author(name=event['league']['name'], icon_url=event['league']['image'])
@@ -101,14 +124,14 @@ class Query(commands.Cog):
                     description = f"{state} match",
                     color = discord.Color.teal(),
                     # set the timestamp to the current time in PST time
-                    timestamp = datetime.now(timezone(timedelta(hours=-7))))
+                    timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET))))
                 embed.set_footer(text="Timezone in {}".format(self.TIMEZONE))
                 # set author image to team 1 image
                 embed.set_author(name=' vs '.join([code for _, code in teams]), icon_url=event['match']['teams'][0]['image'])
                 # set thumbnail to team 2 image
                 embed.set_thumbnail(url=event['match']['teams'][1]['image'])
-                embed.add_field(name='Start time',
-                                value= f"{self._convert_timezone(event['startTime'], self.TIMEZONE)}", 
+                embed.add_field(name='Start Time',
+                                value= f"{self.convert_timezone(event['startTime'], self.TIMEZONE)}", 
                                 inline=False)
                 # add field for each team
                 for index, team in enumerate(teams):
@@ -145,14 +168,14 @@ class Query(commands.Cog):
                 description = f"{state} match",
                 color = discord.Color.teal(),
                 # set the timestamp to the current time in PST time
-                timestamp = datetime.now(timezone(timedelta(hours=-7))))
+                timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET))))
             embed.set_footer(text="Timezone in {}".format(self.TIMEZONE))
             # set author image to team 1 image
             embed.set_author(name=' vs '.join([code for _, code in teams]), icon_url=event['match']['teams'][0]['image'])
             # set thumbnail to team 2 image
             embed.set_thumbnail(url=event['match']['teams'][1]['image'])
-            embed.add_field(name='Start time',
-                            value= f"{self._convert_timezone(event['startTime'], self.TIMEZONE)}", 
+            embed.add_field(name='Start Time',
+                            value= f"{self.convert_timezone(event['startTime'], self.TIMEZONE)}", 
                             inline=False)
             # add field for each team
             for index, team in enumerate(teams):
@@ -183,12 +206,12 @@ class Query(commands.Cog):
                 url=f"https://lolesports.com/schedule?leagues={league['slug']}"
             )
             embed.set_author(name="LoL Esports League", 
-                            icon_url= const.LOL_ESPORTS_ICON)
+                            icon_url= consts.ICONS.get('lolesports_teal'))
             embed.add_field(name='Region', value=league['region'].title(), inline=False)
             embed.add_field(name='Schedules', value=f"[Click here](https://lolesports.com/schedule?leagues={league['slug']})", inline=True)
             embed.add_field(name='ID', value=league['id'], inline=True)
             embed.set_image(url=league['image'])
-            embed.set_footer(text="Powered by Riot Games", icon_url=const.RIOT_ICON)
+            embed.set_footer(text="Powered by Riot Games", icon_url=consts.ICONS.get('riot'))
             embeds.append(embed)
 
         return embeds
@@ -399,7 +422,7 @@ class Query(commands.Cog):
         embed.add_field(name='Players', value=len(roster), inline=True)
         embed.add_field(name='ID', value=team['id'], inline=True)
         embed.set_image(url=team['image'])
-        embed.set_footer(text="Powered by LoL Esports", icon_url=const.LOL_ESPORTS_ICON)
+        embed.set_footer(text="Powered by LoL Esports", icon_url=consts.ICONS.get('lolesports_teal'))
         await interaction.followup.send(embed=embed)
 
         # create a select menu to display the players
@@ -439,39 +462,59 @@ class Query(commands.Cog):
     def _create_event_embeds(self, events: List) -> list:
         '''Create embeds for the two teams'''
         embeds = []
-        team_codes = []
-        for event in events[:1]: 
-            leauge = event['league']
-            for team in event['match']['teams']:
-                embeds.append(discord.Embed(url=f"https://lolesports.com/schedule?leagues={leauge['slug']}").set_image(url=team['image']))
-                team_codes.append(team['code'])
-                
-        embeds[0].title = f"{team_codes[0]} vs {team_codes[-1]}"
-        embeds[0].color = discord.Color.random()
-        embeds[0].set_author(name=f"{events[0]['league']['name']}",
-                            icon_url=const.LOL_ESPORTS_ICON)
-        embeds[0].add_field(name='Start time', value= f"{self._convert_timezone(events[0]['startTime'], self.TIMEZONE)}", inline=True)
-        embeds[0].add_field(name='League', value=events[0]['league']['slug'].upper(), inline=True)
-        embeds[0].add_field(name='ID', value=events[0]['league']['id'], inline=True)
-        # add the team codes to the embed
-        for index, team_code in enumerate(team_codes):
-            embeds[0].add_field(name=f'Team {index+1}', value=team_code, inline=True)
-        embeds[0].set_footer(text="Powered by Riot Games", icon_url=const.RIOT_ICON)
+        # loop through the events and send the embeds
+        for event in events:
+            teams = event['match']['teams']
+            # skip the event if both team codes are "TBD"
+            if teams[0]['code'] == 'TBD' and teams[1]['code'] == 'TBD':
+                continue
+            embed = discord.Embed(title=event['league']['name'],
+                description = f"Match starts in {self.convert_timedelta(event['startTime'])}",
+                color=discord.Color.teal(),
+                # url=f"https://lolesports.com/schedule?leagues={event['league']['slug']}",
+                # set the timestamp to the current time in PST time
+                timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET)))
+            )
+            embed.set_author(name=' vs '.join([team['code'] for team in teams]), icon_url=teams[0]['image'])
+            embed.set_thumbnail(url=teams[1]['image'])
+            embed.set_footer(text="Powered by LoL Esports", icon_url=consts.ICONS.get('worlds'))
+            embed.add_field(name='Start Time',
+                            value= f"{self.convert_timezone(event['startTime'], self.TIMEZONE)}", 
+                            inline=True)
+            # embed.add_field(name='League', value=event['league']['name'], inline=True)
+            # add a blank field here
+            embed.add_field(name='\u200b', value='\u200b', inline=True)
+            # embed.add_field(name='ID', value=event['league']['id'], inline=True)
+            embed.add_field(name='Schedule', value=f"[Click here](https://lolesports.com/schedule?leagues={event['league']['slug']})", inline=True)
+
+            # add field for each team
+            for index, team in enumerate(teams):
+                embed.add_field(name=f'Team {index+1}', value=team["code"], inline=True)
+            # add a blank field at the second to last position
+            embed.insert_field_at(-1, name='\u200b', value='\u200b', inline=True)
+
+
+            # add to the embeds list
+            embeds.append(embed)
         return embeds
 
 
     # create a slash command to get the upcoming events for a specific team or league
-    @app_commands.command(name='events', description='Get the upcoming events for a specific team or league')
+    @app_commands.command(name='upnext', description='Get the upcoming events for a specific team or league')
     @app_commands.describe(league='(Optional) The league/region of the given leagues. Default to international leagues.', 
-                           team_code='(Optional) The team code of the given team.(ex. C9, edg, t1, fnc...)')
-    async def upcoming_events(self, interaction: discord.Interaction,  team_code: Optional[str] = None, league: Optional[const.RegionStr] = const.RegionStr.INTL):
-
+                           team_code='(Optional) The team code of the given team.(ex. C9, edg, t1, fnc...)',
+                           limit='(Optional) The number of events to display. Defaults to 5.')
+    async def upcoming_events(self, interaction: discord.Interaction,  
+                              team_code: Optional[str] = None, 
+                              league: Optional[consts.RegionStr] = consts.RegionStr.INTL, 
+                              limit:Optional[int] = 10):
+        await interaction.response.defer()
         # process the league id
         if league.name == 'INTL':
-            league_id = [int(_id) for _id in league.value.split(',')]
+            league_ids = [int(_id) for _id in league.value.split(',')]
         else:
-            league_id = int(league.value)
-        print('league id', league_id)
+            league_ids = int(league.value)
+        print('league id', league_ids)
         
         # prioritize the team code over the league if both are given
         if team_code:
@@ -484,15 +527,15 @@ class Query(commands.Cog):
                 return
             events = self.lolesports.eventlists(team_slug=major_teams[team_slug])
         else:
-            events = self.lolesports.eventlists(league_ids=league_id)
+            events = self.lolesports.eventlists(league_ids=league_ids)
         # check if the list is empty
         if not events:
-            await interaction.response.send_message('There are no upcoming events for this `team` or `league`. Come back later! 😊') 
+            await interaction.followup.send('There are no upcoming events for this `team` or `league`. Come back later! 😊') 
             return
         
-        embeds = self._create_event_embeds(events)
-        await interaction.response.send_message('teams', embeds=embeds)
-
+        embeds = self._create_event_embeds(events[:limit])
+        await interaction.followup.send(embeds=embeds)
+        
 
 async def setup(client: commands.Bot) -> None:
     await client.add_cog(Query(client))
