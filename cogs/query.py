@@ -8,6 +8,7 @@ import pytz
 from reactionmenu import ViewMenu, ViewButton, ViewSelect, Page
 from typing import Optional, Union, List, Literal
 import utils.constants as consts
+import math
 
 class Query(commands.Cog):
     def __init__(self, client: commands.Bot) -> None:
@@ -22,13 +23,18 @@ class Query(commands.Cog):
     
     @staticmethod
     def convert_timezone(time_str:str, timezone:str = 'US/Pacific'):
-        # Parse input string as a datetime object in UTC
-        utc_timestamp = datetime.strptime(time_str, "%Y-%m-%dT%H:%M:%SZ")
-        # Convert the UTC timestamp to PST
-        pst_timestamp = utc_timestamp.replace(tzinfo=pytz.timezone('UTC')).astimezone(pytz.timezone(timezone) )
-        # Format the PST timestamp without timezone offset, seconds and convert to 12 hr format
-        pst_timestamp = pst_timestamp.strftime("%Y-%m-%d %H:%M %p")
-        return pst_timestamp
+        time_str_formats = ["%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ"]
+        for format_str in time_str_formats:
+            try:
+                # Parse input string as a datetime object in UTC
+                utc_timestamp = datetime.strptime(time_str, format_str)
+                # Convert the UTC timestamp to PST
+                new_time_str= utc_timestamp.replace(tzinfo=pytz.timezone('UTC')).astimezone(pytz.timezone(timezone))
+                return new_time_str.strftime("%Y-%m-%d %H:%M %p")
+            except ValueError:
+                continue
+        # If no valid format is found
+        return "Invalid time format"
     
     @staticmethod
     def convert_timedelta(iso_8601_time: str, show_direction: bool = False) -> str:
@@ -90,33 +96,23 @@ class Query(commands.Cog):
         return emoji
 
     # helper function to create embeds for the two teams; return list of embeds
-    def _create_live_event_embeds(self, events: list) -> List[discord.Embed]:
+    def _create_live_event_embeds(self, events: list, all_streams: bool = False) -> list:
         embeds = []
         for event in events:
             if event['type'] == 'show':
+                time_delta = self.convert_timedelta(event['startTime'], show_direction=True)
                 embed = discord.Embed(title=f"{event['league']['name']} Preshow",
-                    description = f"Live now",
+                    description = f"Live now - {time_delta if time_delta != 'past' else 'In progress'}", 
                     color = discord.Color.random(),
                     # set the timestamp to the current time in PST time
                     timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET))))
                 embed.set_author(name=event['league']['name'], icon_url=consts.ICONS.get('lolesports'))
                 embed.set_thumbnail(url=event['league']['image'])
                 embed.set_footer(text="Timezone in {}".format(self.TIMEZONE))
-                time_delta = self.convert_timedelta(event['startTime'])
-                embed.add_field(name='Countdown', value= time_delta if time_delta != 'past' else 'In progress', inline=True)
+                embed.add_field(name='Schedule', value= f"{self.convert_timezone(event['startTime'], self.TIMEZONE)}", 
+                inline=False)
                 embed.add_field(name='League', value=event['league']['name'], inline=True)
                 embed.add_field(name='Event ID', value=event['id'], inline=True)
-                # add a full list of streams to the streams field
-                streams = []
-                for stream in event['streams'][:5]:
-                    if stream['provider'] == 'youtube':
-                        link = f"https://www.youtube.com/watch?v={stream['parameter']}"
-                    else:
-                        link = f"https://www.twitch.tv/{stream['parameter']}"
-                    offcial_link = f"https://lolesports.com/live/worlds/{stream['parameter']}"
-                    print(stream['parameter'], link)
-                    streams.append(f"[{stream['parameter']}]({offcial_link}) in {stream['mediaLocale']['englishName']}")
-                embed.add_field(name='Streams', value='\n'.join(streams), inline=False)
             else:
                 teams = event['match']['teams']
                 # skip the event if both team codes are "TBD"
@@ -128,7 +124,7 @@ class Query(commands.Cog):
                     if match['state'] == 'inProgress':
                         game_state = f"Currently in game {match['number']}"
                         break
-                embed = discord.Embed(title=f"{event['league']['name']} {event['blockName']}",
+                embed = discord.Embed(title=f"{event['league']['name']} - {event['blockName']}",
                     description = game_state, #set description to the current match number
                     color=discord.Color.teal(),
                     # url=f"https://lolesports.com/schedule?leagues={event['league']['slug']}",
@@ -138,8 +134,8 @@ class Query(commands.Cog):
                 embed.set_author(name=' vs '.join([team['code'] for team in teams]), icon_url=teams[0]['image'])
                 embed.set_thumbnail(url=teams[1]['image'])
                 embed.set_footer(text="Powered by LoL Esports", icon_url= event['league']['image'])
-                embed.add_field(name='Start Time',
-                                value= self.convert_timedelta(event['startTime'], show_direction=True), 
+                embed.add_field(name='Schedule',
+                                value= f"{self.convert_timezone(event['startTime'], self.TIMEZONE)}",
                                 inline=True)
                 embed.add_field(name='\u200b', value='\u200b', inline=True)
                 # add a stream link field which link to the official lolesports stream
@@ -148,8 +144,8 @@ class Query(commands.Cog):
                 for index, team in enumerate(teams):
                         embed.add_field(name=f'Team {index+1}', value=f"{team['name']}", inline=True)
                 # insert the field for the scores (ex. team1 0-0 team2) inbetween the two teams
-                scores_str = f"{teams[0]['result']['gameWins']}-{teams[1]['result']['gameWins']}"
-                embed.insert_field_at(2, name='scores', value=f"||{teams[0]['code']} {scores_str} {teams[1]['code']}||", inline=False)
+                scores_str = f"{teams[0]['result']['gameWins']} - {teams[1]['result']['gameWins']}"
+                embed.insert_field_at(4, name='scores', value=f"||{teams[0]['code']} {scores_str} {teams[1]['code']}||", inline=True)
                 # embed.add_field(name='League', value=event['league']['name'], inline=True)
                 # stage field
                 embed.add_field(name='Stage', value=event['blockName'], inline=True)
@@ -157,16 +153,26 @@ class Query(commands.Cog):
                 embed.add_field(name='\u200b', value='\u200b', inline=True)
                 # add a strategy field with the format of bestOf 5
                 embed.add_field(name='Format', value=f"{event['match']['strategy']['type']} {event['match']['strategy']['count']}", inline=True)
+                # add a full list of streams to the streams field
+                if all_streams:
+                    official_streams = []
+                    for stream in event['streams']:
+                        offcial_link = f"https://lolesports.com/live/worlds/{stream['parameter']}"
+                        official_streams.append(f"[`{stream['mediaLocale']['locale']}`]({offcial_link}) in {stream['mediaLocale']['englishName']}")
+                    mid_point = math.ceil(len(official_streams)/2)
+                    embed.add_field(name='All Streams', value='\n'.join(official_streams[:mid_point]), inline=True)
+                    embed.add_field(name='\u200b', value='\n'.join(official_streams[mid_point:]), inline=True)
 
             # add to the embeds list
             embeds.append(embed)
         return embeds
 
     @app_commands.command(name='live', description='Get the live events')
-    async def live(self, interaction: discord.Interaction):        
+    @app_commands.describe(all_streams='Whether to display all the streams for each event. [optional] Defaults to False.')
+    async def live(self, interaction: discord.Interaction, all_streams: Optional[bool] = False):
         await interaction.response.defer(thinking=True)
         events = self.lolesports.live()
-        embeds = self._create_live_event_embeds(events)
+        embeds = self._create_live_event_embeds(events, all_streams)
         # async with interaction.channel.typing():  
         if not events:
             await interaction.followup.send('There are currently no `live` events. Feel free to check out the `/schedule` command or at [lolesports](https://lolesports.com/) for more details! 😊')
@@ -499,7 +505,7 @@ class Query(commands.Cog):
             if teams[0]['code'] == 'TBD' and teams[1]['code'] == 'TBD':
                 continue
             embed = discord.Embed(title=event['league']['name'],
-                description = f"Match starts in {self.convert_timedelta(event['startTime'])}",
+                description = f"Match starts in `{self.convert_timedelta(event['startTime'])}`",
                 color=discord.Color.teal(),
                 # set the timestamp to the current time in PST time
                 timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET)))
@@ -539,7 +545,6 @@ class Query(commands.Cog):
             league_ids = [int(_id) for _id in league.value.split(',')]
         else:
             league_ids = int(league.value)
-        print('league id', league_ids)
         
         # prioritize the team code over the league if both are given
         if team_code:
@@ -559,7 +564,7 @@ class Query(commands.Cog):
             return
         
         embeds = self._create_event_embeds(events[:limit])
-        await interaction.followup.send(embeds=embeds)
+        await interaction.followup.send(f"Here are the **{len(embeds)}** upcoming matches:", embeds=embeds)
         
 
     @app_commands.command()
