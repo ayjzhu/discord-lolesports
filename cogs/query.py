@@ -94,6 +94,22 @@ class Query(commands.Cog):
         else:
             emoji = '<:Fill:1059577540445999214>'
         return emoji
+    
+    # helper function to find the closest match index
+    @staticmethod
+    def find_closest_match_index(matches: list) -> Union[int, None]:
+        current_time = datetime.utcnow()
+        
+        def time_diff(match):
+            match_time = datetime.fromisoformat(match['startTime'][:-1])  # Remove the 'Z' at the end and convert to datetime
+            return abs((match_time - current_time).total_seconds())
+        
+        closest_match = min(matches, key=lambda match: time_diff(match))
+
+        if time_diff(closest_match) > 0:  # Ensure a match is found
+            return matches.index(closest_match)
+        else:
+            return None    
 
     # helper function to create embeds for the two teams; return list of embeds
     def _create_live_event_embeds(self, events: list, all_streams: bool = False) -> list:
@@ -101,7 +117,7 @@ class Query(commands.Cog):
         for event in events:
             if event['type'] == 'show':
                 time_delta = self.convert_timedelta(event['startTime'], show_direction=True)
-                embed = discord.Embed(title=f"{event['league']['name']} Preshow",
+                embed = discord.Embed(title=f"{event['league']['name']} - Preshow",
                     description = f"Live now - {time_delta if time_delta != 'past' else 'In progress'}", 
                     color = discord.Color.random(),
                     # set the timestamp to the current time in PST time
@@ -124,7 +140,7 @@ class Query(commands.Cog):
                     if match['state'] == 'inProgress':
                         game_state = f"Currently in game {match['number']}"
                         break
-                embed = discord.Embed(title=f"{event['league']['name']} - {event['blockName']}",
+                embed = discord.Embed(title=f"{event['league']['name']} - {event['blockName'].title()}",
                     description = game_state, #set description to the current match number
                     color=discord.Color.teal(),
                     # url=f"https://lolesports.com/schedule?leagues={event['league']['slug']}",
@@ -145,10 +161,10 @@ class Query(commands.Cog):
                         embed.add_field(name=f'Team {index+1}', value=f"{team['name']}", inline=True)
                 # insert the field for the scores (ex. team1 0-0 team2) inbetween the two teams
                 scores_str = f"{teams[0]['result']['gameWins']} - {teams[1]['result']['gameWins']}"
-                embed.insert_field_at(4, name='scores', value=f"||{teams[0]['code']} {scores_str} {teams[1]['code']}||", inline=True)
+                embed.insert_field_at(4, name='Scores', value=f"||{teams[0]['code']} {scores_str} {teams[1]['code']}||", inline=True)
                 # embed.add_field(name='League', value=event['league']['name'], inline=True)
                 # stage field
-                embed.add_field(name='Stage', value=event['blockName'], inline=True)
+                embed.add_field(name='Stage', value=event['blockName'].title(), inline=True)
                 # add a blank field here
                 embed.add_field(name='\u200b', value='\u200b', inline=True)
                 # add a strategy field with the format of bestOf 5
@@ -192,16 +208,18 @@ class Query(commands.Cog):
             return
         events = self.lolesports.schedules(keyword.value)
         await interaction.response.defer(thinking=True)
-        
+
+        # find the first page that is closest to the current time
+        embeds = []
         menu = ViewMenu(interaction, menu_type=ViewMenu.TypeEmbed)
         for event in events:
             # skip the event that is a show in progress
             if event['type'] == 'show':
+                print(event)
                 continue
             teams = [(team['name'], team['code']) for team in event['match']['teams']]
-            state = 'Upcoming' if event['state'] == 'unstarted' else 'Completed'
-            embed = discord.Embed(title=event['league']['name'],
-                description = f"{state} match",
+            embed = discord.Embed(title=f"{event['league']['name']} {event['blockName'].title()}",
+                description = f"Match {event['state'].lower()} - {self.convert_timedelta(event['startTime'], show_direction=True)}",
                 color = discord.Color.teal(),
                 # set the timestamp to the current time in PST time
                 timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET))))
@@ -219,11 +237,16 @@ class Query(commands.Cog):
             # add a blank field 
             embed.insert_field_at(2, name='\u200b', value='\u200b', inline=True)    #\uFEFF                   
             embed.add_field(name='League', value=event['league']['name'], inline=True)
-            embed.add_field(name='Stage', value=event['blockName'], inline=True)
+            embed.add_field(name='Stage', value=event['blockName'].title(), inline=True)
             # add a strategy field with the format of bestOf 5
             embed.add_field(name='Format', value=f"{event['match']['strategy']['type']} {event['match']['strategy']['count']}", inline=True)
-            menu.add_page(embed)
-            
+            embeds.append(embed)
+
+        # rearrange the embeds: put the page that is closest to the current time as the first page
+        closest_match_index = self.find_closest_match_index(events)
+        if closest_match_index:
+            embeds = embeds[closest_match_index:] + embeds[:closest_match_index]
+            menu.add_pages(embeds)
         menu.add_button(ViewButton.go_to_first_page())
         menu.add_button(ViewButton(style=discord.ButtonStyle.green, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE))
         menu.add_button(ViewButton(style=discord.ButtonStyle.primary, label='Next', custom_id=ViewButton.ID_NEXT_PAGE))
@@ -566,31 +589,6 @@ class Query(commands.Cog):
         embeds = self._create_event_embeds(events[:limit])
         await interaction.followup.send(f"Here are the **{len(embeds)}** upcoming matches:", embeds=embeds)
         
-
-    @app_commands.command()
-    async def fruits(self, interaction: discord.Interaction, fruit: str):
-        await interaction.response.send_message(f'Your favourite fruit seems to be {fruit}')
-
-    @fruits.autocomplete('fruit')
-    async def fruits_autocomplete(self, interaction: discord.Interaction, current: str,) -> List[app_commands.Choice[str]]:
-        fruits = ['Banana', 'Pineapple', 'Apple', 'Watermelon', 'Melon', 'Cherry']
-        # get major teams
-        major_teams = self.lolesports.get_current_teams()
-        print(major_teams)
-        
-        # iterate through the major_teams dictionary and set the name as the key and the value as the value of the dictionary
-        return [
-            app_commands.Choice(name=name, value=value)
-            for name, value in major_teams.items() if current.lower() in name.lower()
-        ]
-        
-
-        # return [
-        #     app_commands.Choice(name=fruit, value=fruit)
-        #     for fruit in fruits if current.lower() in fruit.lower()
-        # ]
-
-
 
 async def setup(client: commands.Bot) -> None:
     await client.add_cog(Query(client))
