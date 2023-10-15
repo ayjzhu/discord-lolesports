@@ -30,7 +30,8 @@ class Query(commands.Cog):
                 utc_timestamp = datetime.strptime(time_str, format_str)
                 # Convert the UTC timestamp to PST
                 new_time_str= utc_timestamp.replace(tzinfo=pytz.timezone('UTC')).astimezone(pytz.timezone(timezone))
-                return new_time_str.strftime("%Y-%m-%d %H:%M %p")
+                # return new_time_str.strftime("%Y-%m-%d %H:%M %p")
+                return new_time_str.strftime("%m/%d/%y, %a %I:%M %p")
             except ValueError:
                 continue
         # If no valid format is found
@@ -46,17 +47,20 @@ class Query(commands.Cog):
             diff = -diff
             direction = "ago"
         else:
-            direction = "away"
+            direction = "from now"
         days = diff.days
         hours, remainder = divmod(diff.seconds, 3600)
-        minutes = remainder // 60
+        # minutes = remainder // 60
+        minutes, seconds = divmod(remainder, 60)
         output = []
         if days > 0:
             output.append(f"{days} days")
         if hours > 0:
             output.append(f"{hours} hours")
-        if minutes > 0:
+        if minutes > 0 and days < 1:    # only show minutes if the event is less than 1 days away
             output.append(f"{minutes} minutes")
+        if seconds > 0 and hours < 1:   # only show seconds if the event is less than 1 hours away
+            output.append(f"{seconds} seconds")
         if show_direction:
             output.append(direction)
         return ' '.join(output)
@@ -117,7 +121,7 @@ class Query(commands.Cog):
         for event in events:
             if event['type'] == 'show':
                 time_delta = self.convert_timedelta(event['startTime'], show_direction=True)
-                embed = discord.Embed(title=f"{event['league']['name']} - Preshow",
+                embed = discord.Embed(title=f"{event['league']['name']} Preshow",
                     description = f"Live now - {time_delta if time_delta != 'past' else 'In progress'}", 
                     color = discord.Color.random(),
                     # set the timestamp to the current time in PST time
@@ -219,7 +223,7 @@ class Query(commands.Cog):
                 continue
             teams = [(team['name'], team['code']) for team in event['match']['teams']]
             embed = discord.Embed(title=f"{event['league']['name']} {event['blockName'].title()}",
-                description = f"Match {event['state'].lower()} - {self.convert_timedelta(event['startTime'], show_direction=True)}",
+                description = f"{event['state'].title()} match - {self.convert_timedelta(event['startTime'], show_direction=True)}",
                 color = discord.Color.teal(),
                 # set the timestamp to the current time in PST time
                 timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET))))
@@ -235,11 +239,11 @@ class Query(commands.Cog):
             for index, team in enumerate(teams):
                     embed.add_field(name=f'Team {index+1}', value=f'{team[0]} ({team[1]})', inline=True)    
             # add a blank field 
-            embed.insert_field_at(2, name='\u200b', value='\u200b', inline=True)    #\uFEFF                   
+            embed.insert_field_at(2, name='\u200b', value='\u200b', inline=True)    #\uFEFF
+            embed.add_field(name='Format', value=f"{event['match']['strategy']['type']} {event['match']['strategy']['count']}", inline=True)
             embed.add_field(name='League', value=event['league']['name'], inline=True)
             embed.add_field(name='Stage', value=event['blockName'].title(), inline=True)
             # add a strategy field with the format of bestOf 5
-            embed.add_field(name='Format', value=f"{event['match']['strategy']['type']} {event['match']['strategy']['count']}", inline=True)
             embeds.append(embed)
 
         # rearrange the embeds: put the page that is closest to the current time as the first page
@@ -248,10 +252,9 @@ class Query(commands.Cog):
             embeds = embeds[closest_match_index:] + embeds[:closest_match_index]
             menu.add_pages(embeds)
         menu.add_button(ViewButton.go_to_first_page())
-        menu.add_button(ViewButton(style=discord.ButtonStyle.green, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE))
-        menu.add_button(ViewButton(style=discord.ButtonStyle.primary, label='Next', custom_id=ViewButton.ID_NEXT_PAGE))
+        menu.add_button(ViewButton(style=discord.ButtonStyle.primary, label='Back', custom_id=ViewButton.ID_PREVIOUS_PAGE))
+        menu.add_button(ViewButton(style=discord.ButtonStyle.green, label='Next', custom_id=ViewButton.ID_NEXT_PAGE))
         menu.add_button(ViewButton.go_to_last_page())
-        menu.add_button(ViewButton.end_session())
         await menu.start()
 
     # helper function to create embeds for the leagues
@@ -451,20 +454,20 @@ class Query(commands.Cog):
         menu.add_button(ViewButton.next())
         await menu.start()
 
+    async def team_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        teams = consts.WORLDS_TEAMS.items()
+        return[
+            app_commands.Choice(name=code.upper(), value=slug)
+            for code, slug in teams if current.lower() in code.lower()
+        ]
+
     # create a slash command to get the players and info for a specific team
     @app_commands.command(name='team', description='Get the players and info for a specific team')
     @app_commands.describe(team_code='The team code of the given team. [required] (ex. C9, edg, t1, fnc...)')
+    @app_commands.autocomplete(team_code=team_autocomplete)
     async def team_info(self, interaction: discord.Interaction, team_code: str):
-        # initialize the team object and get the teams mappping for the major leagues
-        major_league_ids = self.lolesports.get_major_league_ids()
-        major_teams = self.lolesports.get_teams_mapping_from_leagues(major_league_ids)
         await interaction.response.defer()
-        team_slug = team_code.lower()   # lowercase the team code
-        # check if the team code is valid
-        if team_slug not in major_teams:
-            await interaction.followup.send(f'Invalid team code: {team_code}')
-            return
-        team = self.lolesports.team(major_teams[team_slug])
+        team = self.lolesports.team(team_code)
         roster = self.lolesports.get_roster(team)
         league = team['homeLeague']['name']
         league_image = self.lolesports.get_image_url(league)
@@ -481,7 +484,7 @@ class Query(commands.Cog):
         embed.add_field(name='Players', value=len(roster), inline=True)
         embed.add_field(name='ID', value=team['id'], inline=True)
         embed.set_image(url=team['image'])
-        embed.set_footer(text="Powered by LoL Esports", icon_url=consts.ICONS.get('lolesports_teal'))
+        embed.set_footer(text="Powered by LoL Esports", icon_url=consts.ICONS.get('lolesports'))
         await interaction.followup.send(embed=embed)
 
         # create a select menu to display the players
@@ -581,12 +584,12 @@ class Query(commands.Cog):
             events = self.lolesports.eventlists(team_slug=major_teams[team_slug])
         else:
             events = self.lolesports.eventlists(league_ids=league_ids)
-        # check if the list is empty
-        if not events:
+
+        embeds = self._create_event_embeds(events[:limit])
+        # check if there are any upcoming events
+        if not events or not embeds:
             await interaction.followup.send('There are no upcoming events for this `team` or `league`. Come back later! 😊') 
             return
-        
-        embeds = self._create_event_embeds(events[:limit])
         await interaction.followup.send(f"Here are the **{len(embeds)}** upcoming matches:", embeds=embeds)
         
 

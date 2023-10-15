@@ -81,3 +81,25 @@ class AllRegion(Enum):
 
 MAJOR_TEAMS = {'g2': 'g2-esports', 'fnc': 'fnatic', 'xl': 'excel', 'th': 'team-heretics-lec', 'bds': 'team-bds', 'sk': 'sk-gaming', 'mad': 'mad-lions', 'koi': 'rogue', 'ast': 'astralis', 'vit': 'team-vitality', 'kt': 'kt-rolster', 'gen': 'geng', 'hle': 'hanwha-life-esports', 'dk': 'dwg-kia', 't1': 't1', 'drx': 'drx', 'lsb': 'liiv-sandbox', 'bro': 'fredit-brion', 'ns': 'nongshim-redforce', 'kdf': 'kwangdong-freecs', 'c9': 'cloud9', 'gg': 'golden-guardians', 'eg': 'evil-geniuses', 'tl': 'team-liquid', 'nrg': 'nrg-esports', 'tsm': 'tsm', 'dig': 'dignitas', '100': '100-thieves', 'fly': 'flyquest', 'imt': 'immortals-progressive', 'blg': 'bilibili-gaming', 'jdg': 'jd-gaming', 'lng': 'lng-esports', 'tes': 'top-esports', 'omg': 'oh-my-god', 'wbg': 'weibo-gaming', 'rng': 'royal-never-give-up', 'edg': 'edward-gaming', 'we': 'team-we', 'nip': 'victory-five', 'fpx': 'funplus-phoenix', 
 'ig': 'invictus-gaming', 'tt': 'thunder-talk-gaming', 'up': 'ultra-prime', 'ra': 'rare-atom', 'al': 'anyones-legend', 'lgd': 'lgd-gaming'}
+
+WORLDS_TEAMS = {
+    'jdg': 'jd-gaming',
+    'blg': 'bilibili-gaming',
+    'lng': 'lng-esports',
+    'wbg': 'weibo-gaming',
+    'gen': 'geng',
+    't1': 't1',
+    'kt': 'kt-rolster',
+    'dk': 'dwg-kia',
+    'nrg': 'nrg-esports',
+    'c9': 'cloud9',
+    'tl': 'team-liquid',
+    'g2': 'g2-esports',
+    'fnc': 'fnatic',
+    'mad': 'mad-lions',
+    'bds': 'team-bds',
+    'psg': 'psg-talon',
+    'cfo': 'ctbc-flying-oyster',
+    'gam': 'gam-esports',
+    'tw': 'team-whales',
+}
