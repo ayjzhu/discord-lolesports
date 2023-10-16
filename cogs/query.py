@@ -57,10 +57,10 @@ class Query(commands.Cog):
             output.append(f"{days} days")
         if hours > 0:
             output.append(f"{hours} hours")
-        if minutes > 0 and days < 1:    # only show minutes if the event is less than 1 days away
+        if minutes > 0 and days < 1:    # only show minutes if the event is less than 1 day away
             output.append(f"{minutes} minutes")
-        if seconds > 0 and hours < 1:   # only show seconds if the event is less than 1 hours away
-            output.append(f"{seconds} seconds")
+            if seconds > 0 and minutes < 2:   # only show seconds if the event is less than 2 minutes away
+                output.append(f"{seconds} seconds")
         if show_direction:
             output.append(direction)
         return ' '.join(output)
@@ -224,7 +224,8 @@ class Query(commands.Cog):
             teams = [(team['name'], team['code']) for team in event['match']['teams']]
             embed = discord.Embed(title=f"{event['league']['name']} {event['blockName'].title()}",
                 description = f"{event['state'].title()} match - {self.convert_timedelta(event['startTime'], show_direction=True)}",
-                color = discord.Color.teal(),
+                # color based on the state of the event: unstarted = teal, completed = orange, inProgress/other = green,
+                color = discord.Color.teal() if event['state'] == 'unstarted' else discord.Color.orange() if event['state'] == 'completed' else discord.Color.green(),
                 # set the timestamp to the current time in PST time
                 timestamp = datetime.now(timezone(timedelta(hours=self.TIMZONE_OFFSET))))
             embed.set_footer(text="Timezone in {}".format(self.TIMEZONE))
