@@ -98,8 +98,5 @@ WORLDS_TEAMS = {
     'fnc': 'fnatic',
     'mad': 'mad-lions',
     'bds': 'team-bds',
-    'psg': 'psg-talon',
-    'cfo': 'ctbc-flying-oyster',
     'gam': 'gam-esports',
-    'tw': 'team-whales',
 }

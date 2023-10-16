@@ -14,9 +14,10 @@ DISCORD_GUILD_ID = os.getenv('ALLOWED_SERVER_IDS')
 MY_GUILD = discord.Object(id=DISCORD_GUILD_ID)  # replace with your guild id
 intents = discord.Intents.default()
 intents.message_content = True
-
-bot = commands.Bot(command_prefix=commands.when_mentioned_or(os.getenv('DISCORD_BOT_PREFIX')), 
-                    description='A music AI bot', 
+intents.members = True
+DISCORD_BOT_PREFIX = ';'
+bot = commands.Bot(command_prefix=commands.when_mentioned_or(DISCORD_BOT_PREFIX),
+                    description='A LoL Esports Assistant Bot',
                     intents=intents)
 
 async def load_cogs():
@@ -29,7 +30,7 @@ async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id}) -  Discord version: {discord.__version__}')
     activity = discord.Activity(name='to you', type=discord.ActivityType.listening)
     bot.tree.copy_global_to(guild=MY_GUILD)
-    await bot.tree.sync(guild=MY_GUILD)    
+    await bot.tree.sync(guild=MY_GUILD)
     await bot.change_presence(activity=activity)
 
 async def main():
