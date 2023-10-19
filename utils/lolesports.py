@@ -17,7 +17,7 @@ class Region(Enum):
     WQS = 110988878756156222
 
 class LolEsports:
-    def __init__(self, region: str = 'WORLD', season: str = 'summer_2023'):
+    def __init__(self, region: str = 'WORLDS', season: str = 'summer_2023'):
         self.api_base = os.getenv('API_BASE')
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
