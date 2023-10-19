@@ -28,7 +28,7 @@ async def load_cogs():
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id}) -  Discord version: {discord.__version__}')
-    activity = discord.Activity(name='to you', type=discord.ActivityType.listening)
+    activity = discord.Activity(name='/schedule', type=discord.ActivityType.watching)
     bot.tree.copy_global_to(guild=MY_GUILD)
     await bot.tree.sync(guild=MY_GUILD)
     await bot.change_presence(activity=activity)
