@@ -628,6 +628,29 @@ class LolEsports:
             player.update({'fullname': f'{player["firstName"]} "{player["summonerName"]}" {player["lastName"]}'})
         return players
     
+    # a function to return events without tbd
+    @staticmethod
+    def get_events_without_tbd(events: list) -> list:
+        """Get the events without tbd
+
+        Parameters
+        ----------
+        events: `list`
+            A list of events
+
+        Returns
+        -------
+        events: `list`
+            A list of events without tbd
+        """
+        valid_events = []
+        for event in events:
+            teams = event['match']['teams']
+            # skip the event if both team codes are "TBD"
+            if not (teams[0]['code'] == 'TBD' and teams[1]['code'] == 'TBD'):
+                valid_events.append(event)
+        return valid_events
+
     # an api function to get the event list of a team or a league
     def eventlists(self, team_slug:Optional[str] = None, league_ids:Union[int, List[int]] = None) -> List[dict]:
         """Get the event list of a team or a league

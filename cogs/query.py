@@ -174,14 +174,14 @@ class Query(commands.Cog):
                 # add a strategy field with the format of bestOf 5
                 embed.add_field(name='Format', value=f"{event['match']['strategy']['type']} {event['match']['strategy']['count']}", inline=True)
                 # add a full list of streams to the streams field
-                if all_streams:
-                    official_streams = []
-                    for stream in event['streams']:
-                        offcial_link = f"https://lolesports.com/live/worlds/{stream['parameter']}"
-                        official_streams.append(f"[`{stream['mediaLocale']['locale']}`]({offcial_link}) in {stream['mediaLocale']['englishName']}")
-                    mid_point = math.ceil(len(official_streams)/2)
-                    embed.add_field(name='All Streams', value='\n'.join(official_streams[:mid_point]), inline=True)
-                    embed.add_field(name='\u200b', value='\n'.join(official_streams[mid_point:]), inline=True)
+            if all_streams:
+                official_streams = []
+                for stream in event['streams']:
+                    offcial_link = f"https://lolesports.com/live/worlds/{stream['parameter']}"
+                    official_streams.append(f"[`{stream['mediaLocale']['locale']}`]({offcial_link}) in {stream['mediaLocale']['englishName']}")
+                mid_point = math.ceil(len(official_streams)/2)
+                embed.add_field(name='All Streams', value='\n'.join(official_streams[:mid_point]), inline=True)
+                embed.add_field(name='\u200b', value='\n'.join(official_streams[mid_point:]), inline=True)
 
             # add to the embeds list
             embeds.append(embed)
